@@ -18,6 +18,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.c0mpile.comix.ui.library.LibraryScreen
 import com.c0mpile.comix.ui.reader.ReaderScreen
+import com.c0mpile.comix.ui.settings.SettingsScreen
 
 /**
  * Top-level navigation host for the Comix single-activity application.
@@ -36,12 +37,23 @@ fun ComixNavHost(
             LibraryScreen(
                 onOpenComic = { comicKey ->
                     navController.navigate(ReaderRoute(comicKey))
+                },
+                onOpenSettings = {
+                    navController.navigate(SettingsRoute)
                 }
             )
         }
 
         composable<ReaderRoute> {
             ReaderScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable<SettingsRoute> {
+            SettingsScreen(
                 onNavigateBack = {
                     navController.popBackStack()
                 }

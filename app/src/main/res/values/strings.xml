@@ -78,6 +78,32 @@
     <string name="reader_scale_mode_fit_width">Fit Width</string>
     <string name="reader_scale_mode_toggle_cd">Toggle page scale mode, currently %1$s</string>
 
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_section_reader">Reader</string>
+    <string name="settings_section_folders">Library folders</string>
+
+    <string name="settings_theme_title">Theme</string>
+    <string name="settings_theme_system">System default</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+
+    <string name="settings_reading_direction_title">Default reading direction</string>
+    <string name="settings_reading_direction_ltr">Left to right</string>
+    <string name="settings_reading_direction_rtl">Right to left</string>
+
+    <string name="settings_scale_mode_title">Page scale mode</string>
+    <string name="settings_scale_mode_fit_screen">Fit screen</string>
+    <string name="settings_scale_mode_fit_width">Fit width</string>
+
+    <string name="settings_keep_screen_on_title">Keep screen on</string>
+    <string name="settings_keep_screen_on_summary">Prevent the screen from sleeping while reading</string>
+
+    <string name="settings_folders_empty">No comic folders added</string>
+    <string name="settings_folder_permission_revoked">Permission revoked</string>
+    <string name="settings_folder_remove_cd">Remove folder %1$s</string>
+    <string name="settings_add_folder">Add comic folder</string>
+
     <string name="error_file_not_found_title">Comic not found</string>
     <string name="error_file_not_found_message">The comic file could not be found at its original location.</string>
     <string name="error_permission_revoked_title">Permission revoked</string>
