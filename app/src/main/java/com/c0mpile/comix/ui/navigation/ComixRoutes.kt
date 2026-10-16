@@ -10,3 +10,9 @@ data object LibraryRoute
 
 @Serializable
 data class ReaderRoute(val comicKey: String)
+
+/**
+ * Route for the application settings screen.
+ */
+@Serializable
+data object SettingsRoute
