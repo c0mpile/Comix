@@ -7,7 +7,9 @@
     <string name="action_reauthorize_folder">Re-authorize</string>
     <string name="action_remove_folder">Remove</string>
     <string name="action_retry">Retry</string>
+    <string name="action_retry_page">Retry page</string>
     <string name="action_back">Back</string>
+    <string name="action_back_to_library">Back to Library</string>
     <string name="action_close">Close</string>
 
     <string name="empty_no_folders_title">No comic folders added</string>
@@ -19,8 +21,8 @@
     <string name="empty_no_comics_action_rescan">Rescan folders</string>
     <string name="empty_no_comics_action_add">Add another folder</string>
 
-    <string name="loading_library">Loading your library...</string>
-    <string name="scanning_library">Scanning for comics...</string>
+    <string name="loading_library">Loading your library&#8230;</string>
+    <string name="scanning_library">Scanning for comics&#8230;</string>
 
     <string name="banner_revoked_folders_title">Folder access revoked</string>
     <string name="banner_revoked_folder_message">Permission to read \"%1$s\" has expired or was revoked.</string>
@@ -37,4 +39,21 @@
     <string name="reading_progress_finished">Finished</string>
 
     <string name="reader_placeholder">Reader for %1$s</string>
+    <string name="reader_page_indicator">%1$d / %2$d</string>
+    <string name="reader_page_indicator_cd">Page %1$d of %2$d</string>
+    <string name="reader_slider_cd">Page scrubber</string>
+    <string name="reader_page_image_cd">Page %1$d of %2$d</string>
+    <string name="reader_loading_archive">Opening comic&#8230;</string>
+    <string name="reader_loading_page">Loading page %1$d&#8230;</string>
+
+    <string name="error_file_not_found_title">Comic not found</string>
+    <string name="error_file_not_found_message">The comic file could not be found at its original location.</string>
+    <string name="error_permission_revoked_title">Permission revoked</string>
+    <string name="error_permission_revoked_message">Access permission for this comic file was revoked.</string>
+    <string name="error_corrupt_archive_title">Corrupt archive</string>
+    <string name="error_empty_archive_title">Empty archive</string>
+    <string name="error_empty_archive_message">This comic archive contains no readable pages.</string>
+    <string name="error_oom_title">Out of memory</string>
+    <string name="error_oom_message">Unable to allocate memory to display this page.</string>
+    <string name="error_page_failed">Failed to load page %1$d</string>
 </resources>

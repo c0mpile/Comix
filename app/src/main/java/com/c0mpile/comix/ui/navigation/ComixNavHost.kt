@@ -16,9 +16,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
-import com.c0mpile.comix.R
 import com.c0mpile.comix.ui.library.LibraryScreen
-import com.c0mpile.comix.ui.theme.ComixDimens
+import com.c0mpile.comix.ui.reader.ReaderScreen
 
 /**
  * Top-level navigation host for the Comix single-activity application.
@@ -41,26 +40,12 @@ fun ComixNavHost(
             )
         }
 
-        composable<ReaderRoute> { backStackEntry ->
-            val route = backStackEntry.toRoute<ReaderRoute>()
-            Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(ComixDimens.spacingLarge),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Button(onClick = { navController.popBackStack() }) {
-                        Text(
-                            text = stringResource(
-                                R.string.reader_placeholder,
-                                route.comicKey
-                            )
-                        )
-                    }
+        composable<ReaderRoute> {
+            ReaderScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
                 }
-            }
+            )
         }
     }
 }

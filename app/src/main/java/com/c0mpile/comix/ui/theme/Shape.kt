@@ -37,4 +37,13 @@ object ComixDimens {
 
     val cardElevation = 2.dp
     val progressIndicatorHeight = 4.dp
+
+    val pillCornerRadius = 16.dp
+    val hudElevation = 4.dp
+    val hudTopBarHeight = 64.dp
+    val hudBottomBarHeight = 72.dp
+    val hudScrubberPadding = 16.dp
+    val pageIndicatorPadding = 16.dp
+    val readerPageErrorPadding = 24.dp
+    val touchTargetMin = 48.dp
 }
