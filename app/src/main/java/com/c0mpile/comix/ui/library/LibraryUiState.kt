@@ -19,13 +19,13 @@ data class LibraryUiState(
     val searchQuery: String = "",
     val isSearchActive: Boolean = false,
     val sortOrder: LibrarySortOrder = LibrarySortOrder.TITLE_ASC,
-    val totalComicCount: Int = 0
+    val totalComicCount: Int = comics.size
 ) {
     val showEmptyNoFoldersState: Boolean
-        get() = !isInitialLoading && !isScanning && folders.isEmpty() && totalComicCount == 0
+        get() = !isInitialLoading && !isScanning && folders.isEmpty() && comics.isEmpty() && totalComicCount == 0
 
     val showEmptyNoComicsState: Boolean
-        get() = !isInitialLoading && !isScanning && folders.isNotEmpty() && totalComicCount == 0 && revokedFolders.isEmpty()
+        get() = !isInitialLoading && !isScanning && folders.isNotEmpty() && comics.isEmpty() && totalComicCount == 0 && revokedFolders.isEmpty()
 
     val showEmptySearchResultsState: Boolean
         get() = !isInitialLoading && !isScanning && totalComicCount > 0 && comics.isEmpty() && searchQuery.isNotBlank()

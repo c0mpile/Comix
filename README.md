@@ -2,13 +2,14 @@
 
 Comix is a Material Design 3 comic book reader for Android built with Kotlin and Jetpack Compose.
 
-## Features (Phase 1)
+## Features
 
 - **Library Management:** Add one or more comic folders via Android's Storage Access Framework (`ACTION_OPEN_DOCUMENT_TREE`) with persisted URI permissions.
 - **Fast Folder Scanning:** Off-main-thread directory traversal using `DocumentsContract` queries, incremental metadata indexing in Room, and content-based SHA-256 identity hashing (`comicKey`).
-- **Cover Grid:** Responsive Material 3 cover grid with automatic Page 1 cover extraction, downsampled WebP disk caching, and Coil 3 integration.
+- **Cover Grid with Search and Sort:** Responsive Material 3 cover grid with automatic Page 1 cover extraction, downsampled WebP disk caching, Coil 3 integration, real-time title/filename search filtering, and persistent sorting (`Title A to Z`, `Title Z to A`, `Recently read`, `Date added`).
 - **CBZ Archive Reader:** Random-access ZIP/CBZ parser (`RandomAccessSource`) supporting standard and ZIP64 archives, natural alphanumeric page sorting, and bounded LRU page bitmap caching (`ReaderPageCache`).
-- **Immersive Reader Experience:** Full-screen horizontal pager (`HorizontalPager`) with pinch-to-zoom (`1x` to `4x`), double-tap zoom (`1x` / `2.5x`), edge-clamped panning, left/right tap zones for page navigation, center tap for the HUD overlay + page scrubber, and automatic per-comic reading progress persistence.
+- **Immersive Reader Experience:** Full-screen horizontal pager (`HorizontalPager`) with left-to-right (`LTR`) and right-to-left (`RTL`) reading directions, `Fit Screen` and `Fit Width` scale modes, pinch-to-zoom (`1x` to `4x`), double-tap zoom (`1x` / `2.5x`), edge-clamped panning, directional left/right tap zones, HUD overlay with quick toggles and page scrubber, `Keep screen on` support, and automatic per-comic reading progress persistence.
+- **Settings Screen (DataStore Preferences):** Configure application theme (`System default`, `Light`, `Dark`), default reading direction (`Left to right`, `Right to left`), page scale mode (`Fit screen`, `Fit width`), `Keep screen on`, and library folder management.
 - **Resilient Error Handling:** Explicit UI states for corrupt archives, empty archives, missing files, revoked folder permissions, and out-of-memory conditions.
 
 ## Tech Stack
@@ -17,8 +18,8 @@ Comix is a Material Design 3 comic book reader for Android built with Kotlin and
 - **UI:** Jetpack Compose (`BOM 2026.09.00`) with Material 3 (`dynamicColor` support, light/dark themes, edge-to-edge layout)
 - **Architecture:** Single-activity MVVM (`ui`, `domain`, `data` layers) with unidirectional `StateFlow` state
 - **Dependency Injection:** Hilt (`2.60.1`)
-- **Persistence:** Room (`2.8.5`) with exported schemas under `app/schemas/`
-- **Navigation:** Navigation Compose (`2.10.2`) with type-safe Kotlin Serialization routes
+- **Persistence:** Room (`2.8.5`) with exported schemas under `app/schemas/`, and Jetpack DataStore Preferences (`1.2.1`) for user settings
+- **Navigation:** Navigation Compose (`2.10.2`) with type-safe Kotlin Serialization routes (`LibraryRoute`, `ReaderRoute`, `SettingsRoute`)
 - **Image Loading:** Coil 3 (`3.6.3`) with custom `ComicCoverFetcher`
 - **Build System:** Gradle (`9.8.1`) with Android Gradle Plugin (`9.4.1`) and Version Catalog (`gradle/libs.versions.toml`)
 - **SDK Levels:** `minSdk = 26`, `compileSdk = 36`, `targetSdk = 36`
@@ -53,7 +54,7 @@ If multiple devices are connected, specify the target serial with `ANDROID_SERIA
 
 ## Testing and Lint
 
-Run JVM unit tests (archive parser, content hasher, repositories, and ViewModels):
+Run JVM unit tests (archive parser, content hasher, Room and DataStore repositories, and ViewModels):
 
 ```bash
 ./gradlew testDebugUnitTest
@@ -76,21 +77,23 @@ Run Android Lint checks:
 ```text
 app/src/main/java/com/c0mpile/comix/
   ComixApp.kt            Application class (Hilt and Coil ImageLoader factory)
-  MainActivity.kt        Single activity hosting Compose with edge-to-edge layout
-  di/                    Hilt modules (Dispatchers, Database, Source, Archive, Repository)
+  MainActivity.kt        Single activity hosting Compose with dynamic theme and edge-to-edge layout
+  MainViewModel.kt       ViewModel observing user theme preferences for MainActivity
+  di/                    Hilt modules (Dispatchers, Database, DataStore, Source, Archive, Repository)
   data/
     local/               Room database, entities, projections, converters, and DAOs
     source/              ComicSource, RandomAccessSource, LocalSource, Sha256ComicKeyHasher
     archive/             ComicArchiveReader, CbzArchiveReader, CoverExtractor, ComicCoverFetcher
-    repository/          LibraryRepositoryImpl and ReaderRepositoryImpl
+    repository/          LibraryRepositoryImpl, ReaderRepositoryImpl, and SettingsRepositoryImpl
   domain/
-    model/               Domain models (Comic, ReadingProgress, LibraryFolder, ComicPage, ComicError)
-    repository/          LibraryRepository and ReaderRepository interfaces
-    usecase/             Library and Reader use cases
+    model/               Domain models (Comic, ReadingProgress, LibraryFolder, ComicPage, ComicError, UserSettings)
+    repository/          LibraryRepository, ReaderRepository, and SettingsRepository interfaces
+    usecase/             Library, Reader, and Settings use cases
   ui/
     theme/               Color, Type, Shape, ComixDimens, and ComixTheme
     components/          EmptyStateView, ErrorStateView, and LoadingStateView
     navigation/          Type-safe ComixRoutes and ComixNavHost
     library/             LibraryScreen, ComicGridItem, LibraryViewModel, and LibraryUiState
     reader/              ReaderScreen, ZoomablePageImage, ReaderOverlayHud, ReaderPageCache, ReaderViewModel
+    settings/            SettingsScreen, SettingsViewModel, and SettingsUiState
 ```
