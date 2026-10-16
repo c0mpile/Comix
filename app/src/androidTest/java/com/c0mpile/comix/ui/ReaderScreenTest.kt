@@ -8,6 +8,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.c0mpile.comix.domain.model.ComicError
+import com.c0mpile.comix.domain.model.ReaderScaleMode
+import com.c0mpile.comix.domain.model.ReadingDirection
 import com.c0mpile.comix.ui.reader.PageLoadState
 import com.c0mpile.comix.ui.reader.ReaderScreenContent
 import com.c0mpile.comix.ui.reader.ReaderUiEvent
@@ -59,6 +61,43 @@ class ReaderScreenTest {
 
         composeTestRule.onNodeWithContentDescription("Back").performClick()
         assertTrue(backClicked)
+    }
+
+    @Test
+    fun rendersHudWithReadingDirectionAndScaleModeTogglesAndDispatchesEvents() {
+        val capturedEvents = mutableListOf<ReaderUiEvent>()
+        val testBitmap = Bitmap.createBitmap(200, 300, Bitmap.Config.ARGB_8888)
+
+        val uiState = ReaderUiState(
+            comicKey = "comic1",
+            title = "Action Comics #1",
+            pageCount = 3,
+            currentPage = 0,
+            isArchiveLoading = false,
+            isHudVisible = true,
+            readingDirection = ReadingDirection.LEFT_TO_RIGHT,
+            scaleMode = ReaderScaleMode.FIT_SCREEN,
+            pageStates = mapOf(0 to PageLoadState.Loaded(testBitmap))
+        )
+
+        composeTestRule.setContent {
+            ComixTheme {
+                ReaderScreenContent(
+                    uiState = uiState,
+                    onEvent = { capturedEvents.add(it) },
+                    onNavigateBack = {}
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("LTR").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Fit Screen").assertIsDisplayed()
+
+        composeTestRule.onNodeWithText("LTR").performClick()
+        assertEquals(ReaderUiEvent.ToggleReadingDirection, capturedEvents.last())
+
+        composeTestRule.onNodeWithText("Fit Screen").performClick()
+        assertEquals(ReaderUiEvent.ToggleScaleMode, capturedEvents.last())
     }
 
     @Test

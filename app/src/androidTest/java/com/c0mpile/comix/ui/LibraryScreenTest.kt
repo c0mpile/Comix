@@ -2,6 +2,7 @@ package com.c0mpile.comix.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -159,5 +160,59 @@ class LibraryScreenTest {
 
         composeTestRule.onNodeWithText("Remove").performClick()
         assertEquals("content://tree/revoked_folder", removedFolderUri)
+    }
+
+    @Test
+    fun rendersEmptySearchResultsStateAndClearSearchDispatchesReset() {
+        var dispatchedEvent: LibraryUiEvent? = null
+
+        val uiState = LibraryUiState(
+            isInitialLoading = false,
+            searchQuery = "Unknown Hero",
+            isSearchActive = true,
+            totalComicCount = 5,
+            comics = emptyList()
+        )
+
+        composeTestRule.setContent {
+            ComixTheme {
+                LibraryScreenContent(
+                    uiState = uiState,
+                    onEvent = { dispatchedEvent = it },
+                    onAddFolderClick = {},
+                    onOpenComic = {}
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("No matching comics").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Clear search").assertIsDisplayed()
+
+        composeTestRule.onNodeWithText("Clear search").performClick()
+        assertEquals(LibraryUiEvent.SearchQueryChanged(""), dispatchedEvent)
+    }
+
+    @Test
+    fun searchIconInTopBarDispatchesSearchActiveChanged() {
+        var dispatchedEvent: LibraryUiEvent? = null
+
+        val uiState = LibraryUiState(
+            isInitialLoading = false,
+            isSearchActive = false
+        )
+
+        composeTestRule.setContent {
+            ComixTheme {
+                LibraryScreenContent(
+                    uiState = uiState,
+                    onEvent = { dispatchedEvent = it },
+                    onAddFolderClick = {},
+                    onOpenComic = {}
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("Search").performClick()
+        assertEquals(LibraryUiEvent.SearchActiveChanged(true), dispatchedEvent)
     }
 }

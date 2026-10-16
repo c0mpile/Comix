@@ -10,6 +10,8 @@ import com.c0mpile.comix.domain.model.ComicError
 import com.c0mpile.comix.domain.model.ComicFormat
 import com.c0mpile.comix.domain.model.ComicPage
 import com.c0mpile.comix.domain.model.ComicSourceType
+import com.c0mpile.comix.domain.model.ReaderScaleMode
+import com.c0mpile.comix.domain.model.ReadingDirection
 import com.c0mpile.comix.domain.model.ReadingProgress
 import com.c0mpile.comix.domain.model.UserSettings
 import com.c0mpile.comix.domain.repository.ReaderRepository
@@ -289,6 +291,81 @@ class ReaderViewModelTest {
         assertNull(viewModel.uiState.value.fatalError)
         assertEquals(4, viewModel.uiState.value.pageCount)
         assertEquals("Reloaded Comic", viewModel.uiState.value.title)
+    }
+
+    @Test
+    fun userSettingsObservationUpdatesReadingDirectionScaleModeAndKeepScreenOn() = runTest(testDispatcher) {
+        val comic = createTestComic("comic1", "Settings Test Comic")
+        coEvery { getComicUseCase("comic1") } returns comic
+        val mockReader = mockk<ComicArchiveReader>(relaxed = true)
+        coEvery { readerRepository.openComicReader(comic) } returns Result.success(mockReader)
+        coEvery { readerRepository.getReadingProgress("comic1") } returns null
+        coEvery { saveReadingProgressUseCase(any(), any(), any()) } returns Unit
+
+        val viewModel = createViewModel("comic1")
+        testScheduler.advanceUntilIdle()
+
+        userSettingsFlow.value = UserSettings(
+            readingDirection = ReadingDirection.RIGHT_TO_LEFT,
+            readerScaleMode = ReaderScaleMode.FIT_WIDTH,
+            keepScreenOn = true
+        )
+        testScheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(ReadingDirection.RIGHT_TO_LEFT, state.readingDirection)
+        assertEquals(ReaderScaleMode.FIT_WIDTH, state.scaleMode)
+        assertTrue(state.keepScreenOn)
+    }
+
+    @Test
+    fun toggleScaleModeSwitchesBetweenFitScreenAndFitWidth() = runTest(testDispatcher) {
+        val comic = createTestComic("comic1", "Scale Mode Comic")
+        coEvery { getComicUseCase("comic1") } returns comic
+        val mockReader = mockk<ComicArchiveReader>(relaxed = true)
+        coEvery { readerRepository.openComicReader(comic) } returns Result.success(mockReader)
+        coEvery { readerRepository.getReadingProgress("comic1") } returns null
+        coEvery { saveReadingProgressUseCase(any(), any(), any()) } returns Unit
+
+        userSettingsFlow.value = UserSettings(readerScaleMode = ReaderScaleMode.FIT_SCREEN)
+        val viewModel = createViewModel("comic1")
+        testScheduler.advanceUntilIdle()
+
+        viewModel.onEvent(ReaderUiEvent.ToggleScaleMode)
+        testScheduler.advanceUntilIdle()
+        coVerify(exactly = 1) { updateReaderScaleModeUseCase(ReaderScaleMode.FIT_WIDTH) }
+
+        userSettingsFlow.value = UserSettings(readerScaleMode = ReaderScaleMode.FIT_WIDTH)
+        testScheduler.advanceUntilIdle()
+
+        viewModel.onEvent(ReaderUiEvent.ToggleScaleMode)
+        testScheduler.advanceUntilIdle()
+        coVerify(exactly = 1) { updateReaderScaleModeUseCase(ReaderScaleMode.FIT_SCREEN) }
+    }
+
+    @Test
+    fun toggleReadingDirectionSwitchesBetweenLeftToRightAndRightToLeft() = runTest(testDispatcher) {
+        val comic = createTestComic("comic1", "Reading Direction Comic")
+        coEvery { getComicUseCase("comic1") } returns comic
+        val mockReader = mockk<ComicArchiveReader>(relaxed = true)
+        coEvery { readerRepository.openComicReader(comic) } returns Result.success(mockReader)
+        coEvery { readerRepository.getReadingProgress("comic1") } returns null
+        coEvery { saveReadingProgressUseCase(any(), any(), any()) } returns Unit
+
+        userSettingsFlow.value = UserSettings(readingDirection = ReadingDirection.LEFT_TO_RIGHT)
+        val viewModel = createViewModel("comic1")
+        testScheduler.advanceUntilIdle()
+
+        viewModel.onEvent(ReaderUiEvent.ToggleReadingDirection)
+        testScheduler.advanceUntilIdle()
+        coVerify(exactly = 1) { updateReadingDirectionUseCase(ReadingDirection.RIGHT_TO_LEFT) }
+
+        userSettingsFlow.value = UserSettings(readingDirection = ReadingDirection.RIGHT_TO_LEFT)
+        testScheduler.advanceUntilIdle()
+
+        viewModel.onEvent(ReaderUiEvent.ToggleReadingDirection)
+        testScheduler.advanceUntilIdle()
+        coVerify(exactly = 1) { updateReadingDirectionUseCase(ReadingDirection.LEFT_TO_RIGHT) }
     }
 
     private fun createTestComic(

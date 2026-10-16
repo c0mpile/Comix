@@ -7,6 +7,8 @@ import com.c0mpile.comix.domain.model.ComicError
 import com.c0mpile.comix.domain.model.ComicFormat
 import com.c0mpile.comix.domain.model.ComicSourceType
 import com.c0mpile.comix.domain.model.LibraryFolder
+import com.c0mpile.comix.domain.model.LibrarySortOrder
+import com.c0mpile.comix.domain.model.ReadingProgress
 import com.c0mpile.comix.domain.model.ScanResult
 import com.c0mpile.comix.domain.model.UserSettings
 import com.c0mpile.comix.domain.usecase.AddLibraryFolderUseCase
@@ -288,18 +290,208 @@ class LibraryViewModelTest {
         }
     }
 
-    private fun createTestComic(comicKey: String, title: String) = Comic(
+    @Test
+    fun searchQueryFiltersComicsByTitleAndFileNameCaseInsensitively() = runTest(testDispatcher) {
+        val comic1 = createTestComic("c1", "Spider-Man Issue 1", "spiderman_01.cbz")
+        val comic2 = createTestComic("c2", "Batman Year One", "batman_01.cbz")
+        val comic3 = createTestComic("c3", "Avengers Assemble", "spider_crossover.cbz")
+        comicsFlow.value = listOf(comic1, comic2, comic3)
+        foldersFlow.value = listOf(createTestFolder("content://tree/f1", "Comics", true))
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            viewModel.onEvent(LibraryUiEvent.SearchQueryChanged("SPIDER"))
+            testScheduler.advanceUntilIdle()
+
+            val filteredState = viewModel.uiState.value
+            assertEquals(2, filteredState.comics.size)
+            assertEquals(listOf("c3", "c1"), filteredState.comics.map { it.comicKey })
+            assertEquals(3, filteredState.totalComicCount)
+            assertEquals("SPIDER", filteredState.searchQuery)
+            assertFalse(filteredState.showEmptySearchResultsState)
+
+            viewModel.onEvent(LibraryUiEvent.SearchQueryChanged("batman"))
+            testScheduler.advanceUntilIdle()
+
+            val batmanState = viewModel.uiState.value
+            assertEquals(1, batmanState.comics.size)
+            assertEquals("c2", batmanState.comics.first().comicKey)
+            assertEquals(3, batmanState.totalComicCount)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun searchQueryWithNoMatchesSetsShowEmptySearchResultsState() = runTest(testDispatcher) {
+        val comic1 = createTestComic("c1", "Spider-Man Issue 1", "spiderman_01.cbz")
+        comicsFlow.value = listOf(comic1)
+        foldersFlow.value = listOf(createTestFolder("content://tree/f1", "Comics", true))
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            viewModel.onEvent(LibraryUiEvent.SearchQueryChanged("Superman"))
+            testScheduler.advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertTrue(state.comics.isEmpty())
+            assertEquals(1, state.totalComicCount)
+            assertEquals("Superman", state.searchQuery)
+            assertTrue(state.showEmptySearchResultsState)
+            assertFalse(state.showEmptyNoComicsState)
+            assertFalse(state.showEmptyNoFoldersState)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun searchActiveChangedToFalseResetsQueryAndActiveState() = runTest(testDispatcher) {
+        val comic1 = createTestComic("c1", "Spider-Man Issue 1", "spiderman_01.cbz")
+        val comic2 = createTestComic("c2", "Batman Year One", "batman_01.cbz")
+        comicsFlow.value = listOf(comic1, comic2)
+        foldersFlow.value = listOf(createTestFolder("content://tree/f1", "Comics", true))
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            viewModel.onEvent(LibraryUiEvent.SearchActiveChanged(true))
+            viewModel.onEvent(LibraryUiEvent.SearchQueryChanged("batman"))
+            testScheduler.advanceUntilIdle()
+
+            val activeState = viewModel.uiState.value
+            assertTrue(activeState.isSearchActive)
+            assertEquals("batman", activeState.searchQuery)
+            assertEquals(1, activeState.comics.size)
+
+            viewModel.onEvent(LibraryUiEvent.SearchActiveChanged(false))
+            testScheduler.advanceUntilIdle()
+
+            val resetState = viewModel.uiState.value
+            assertFalse(resetState.isSearchActive)
+            assertEquals("", resetState.searchQuery)
+            assertEquals(2, resetState.comics.size)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun sortOrderTitleAscendingAppliesNaturalOrder() = runTest(testDispatcher) {
+        val comic1 = createTestComic("c1", "Issue 10")
+        val comic2 = createTestComic("c2", "Issue 2")
+        val comic3 = createTestComic("c3", "Issue 1")
+        comicsFlow.value = listOf(comic1, comic2, comic3)
+        userSettingsFlow.value = UserSettings(librarySortOrder = LibrarySortOrder.TITLE_ASC)
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(listOf("Issue 1", "Issue 2", "Issue 10"), state.comics.map { it.title })
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun sortOrderTitleDescendingAppliesReverseNaturalOrder() = runTest(testDispatcher) {
+        val comic1 = createTestComic("c1", "Issue 10")
+        val comic2 = createTestComic("c2", "Issue 2")
+        val comic3 = createTestComic("c3", "Issue 1")
+        comicsFlow.value = listOf(comic1, comic2, comic3)
+        userSettingsFlow.value = UserSettings(librarySortOrder = LibrarySortOrder.TITLE_DESC)
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(listOf("Issue 10", "Issue 2", "Issue 1"), state.comics.map { it.title })
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun sortOrderRecentlyReadSortsByProgressUpdatedAtDescendingWithTitleFallback() = runTest(testDispatcher) {
+        val progressOld = ReadingProgress("c1", currentPage = 1, pageCount = 10, isFinished = false, updatedAtEpochMillis = 1000L)
+        val progressRecentA = ReadingProgress("c2", currentPage = 2, pageCount = 10, isFinished = false, updatedAtEpochMillis = 5000L)
+        val progressRecentB = ReadingProgress("c4", currentPage = 3, pageCount = 10, isFinished = false, updatedAtEpochMillis = 5000L)
+
+        val comic1 = createTestComic("c1", "Alpha", progress = progressOld)
+        val comic2 = createTestComic("c2", "Beta", progress = progressRecentA)
+        val comic3 = createTestComic("c3", "Gamma", progress = null)
+        val comic4 = createTestComic("c4", "Delta", progress = progressRecentB)
+
+        comicsFlow.value = listOf(comic1, comic2, comic3, comic4)
+        userSettingsFlow.value = UserSettings(librarySortOrder = LibrarySortOrder.RECENTLY_READ)
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(listOf("Beta", "Delta", "Alpha", "Gamma"), state.comics.map { it.title })
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun sortOrderDateAddedDescendingSortsByLastModifiedDescendingWithTitleFallback() = runTest(testDispatcher) {
+        val comic1 = createTestComic("c1", "Alpha", lastModifiedEpochMillis = 1000L)
+        val comic2 = createTestComic("c2", "Beta", lastModifiedEpochMillis = 5000L)
+        val comic3 = createTestComic("c3", "Gamma", lastModifiedEpochMillis = 2000L)
+        val comic4 = createTestComic("c4", "Delta", lastModifiedEpochMillis = 5000L)
+
+        comicsFlow.value = listOf(comic1, comic2, comic3, comic4)
+        userSettingsFlow.value = UserSettings(librarySortOrder = LibrarySortOrder.DATE_ADDED_DESC)
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(listOf("Beta", "Delta", "Gamma", "Alpha"), state.comics.map { it.title })
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun sortOrderSelectedInvokesUpdateLibrarySortOrderUseCase() = runTest(testDispatcher) {
+        viewModel.onEvent(LibraryUiEvent.SortOrderSelected(LibrarySortOrder.RECENTLY_READ))
+        testScheduler.advanceUntilIdle()
+
+        coVerify(exactly = 1) { updateLibrarySortOrderUseCase(LibrarySortOrder.RECENTLY_READ) }
+    }
+
+    private fun createTestComic(
+        comicKey: String,
+        title: String,
+        fileName: String = "$title.cbz",
+        lastModifiedEpochMillis: Long = 1000L,
+        progress: ReadingProgress? = null
+    ) = Comic(
         comicKey = comicKey,
         title = title,
-        fileName = "$title.cbz",
+        fileName = fileName,
         format = ComicFormat.CBZ,
         sourceType = ComicSourceType.LOCAL_SAF,
         availability = ComicAvailability.LOCAL,
         sizeBytes = 10_000L,
-        lastModifiedEpochMillis = 1000L,
+        lastModifiedEpochMillis = lastModifiedEpochMillis,
         pageCount = 10,
-        localUri = "content://tree/$title.cbz",
-        folderUri = "content://tree/f1"
+        localUri = "content://tree/$fileName",
+        folderUri = "content://tree/f1",
+        progress = progress
     )
 
     private fun createTestFolder(
