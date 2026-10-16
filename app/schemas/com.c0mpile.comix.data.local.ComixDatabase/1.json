@@ -1,0 +1,233 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "228958a8dda3ebd210e032a23ae9733c",
+    "entities": [
+      {
+        "tableName": "comics",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`comic_key` TEXT NOT NULL, `title` TEXT NOT NULL, `file_name` TEXT NOT NULL, `format` TEXT NOT NULL, `source_type` TEXT NOT NULL, `availability` TEXT NOT NULL, `size_bytes` INTEGER NOT NULL, `last_modified_epoch_millis` INTEGER NOT NULL, `page_count` INTEGER NOT NULL, `local_uri` TEXT, `folder_uri` TEXT, `local_sample_sha256` TEXT, `drive_file_id` TEXT, `drive_md5` TEXT, `cover_cache_path` TEXT, PRIMARY KEY(`comic_key`))",
+        "fields": [
+          {
+            "fieldPath": "comicKey",
+            "columnName": "comic_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileName",
+            "columnName": "file_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "format",
+            "columnName": "format",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceType",
+            "columnName": "source_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "availability",
+            "columnName": "availability",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sizeBytes",
+            "columnName": "size_bytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastModifiedEpochMillis",
+            "columnName": "last_modified_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pageCount",
+            "columnName": "page_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localUri",
+            "columnName": "local_uri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "folderUri",
+            "columnName": "folder_uri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "localSampleSha256",
+            "columnName": "local_sample_sha256",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "driveFileId",
+            "columnName": "drive_file_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "driveMd5",
+            "columnName": "drive_md5",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "coverCachePath",
+            "columnName": "cover_cache_path",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "comic_key"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_comics_local_uri",
+            "unique": false,
+            "columnNames": [
+              "local_uri"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_comics_local_uri` ON `${TABLE_NAME}` (`local_uri`)"
+          },
+          {
+            "name": "index_comics_folder_uri",
+            "unique": false,
+            "columnNames": [
+              "folder_uri"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_comics_folder_uri` ON `${TABLE_NAME}` (`folder_uri`)"
+          },
+          {
+            "name": "index_comics_local_sample_sha256",
+            "unique": false,
+            "columnNames": [
+              "local_sample_sha256"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_comics_local_sample_sha256` ON `${TABLE_NAME}` (`local_sample_sha256`)"
+          },
+          {
+            "name": "index_comics_drive_file_id",
+            "unique": false,
+            "columnNames": [
+              "drive_file_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_comics_drive_file_id` ON `${TABLE_NAME}` (`drive_file_id`)"
+          },
+          {
+            "name": "index_comics_drive_md5",
+            "unique": false,
+            "columnNames": [
+              "drive_md5"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_comics_drive_md5` ON `${TABLE_NAME}` (`drive_md5`)"
+          }
+        ]
+      },
+      {
+        "tableName": "reading_progress",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`comic_key` TEXT NOT NULL, `current_page` INTEGER NOT NULL, `page_count` INTEGER NOT NULL, `is_finished` INTEGER NOT NULL, `updated_at_epoch_millis` INTEGER NOT NULL, PRIMARY KEY(`comic_key`))",
+        "fields": [
+          {
+            "fieldPath": "comicKey",
+            "columnName": "comic_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currentPage",
+            "columnName": "current_page",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pageCount",
+            "columnName": "page_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isFinished",
+            "columnName": "is_finished",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updated_at_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "comic_key"
+          ]
+        }
+      },
+      {
+        "tableName": "library_folders",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`folder_uri` TEXT NOT NULL, `display_name` TEXT NOT NULL, `added_at_epoch_millis` INTEGER NOT NULL, `last_scanned_at_epoch_millis` INTEGER, PRIMARY KEY(`folder_uri`))",
+        "fields": [
+          {
+            "fieldPath": "folderUri",
+            "columnName": "folder_uri",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "display_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "addedAtEpochMillis",
+            "columnName": "added_at_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastScannedAtEpochMillis",
+            "columnName": "last_scanned_at_epoch_millis",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "folder_uri"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '228958a8dda3ebd210e032a23ae9733c')"
+    ]
+  }
+}
