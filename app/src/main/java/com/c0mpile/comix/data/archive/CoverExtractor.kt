@@ -1,0 +1,131 @@
+package com.c0mpile.comix.data.archive
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.os.Build
+import com.c0mpile.comix.data.local.dao.ComicDao
+import com.c0mpile.comix.data.source.RandomAccessSourceFactory
+import com.c0mpile.comix.di.IoDispatcher
+import com.c0mpile.comix.domain.model.ComicFormat
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
+
+/**
+ * Extracts and caches downsampled cover images from comic archives.
+ */
+@Singleton
+class CoverExtractor @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+    private val randomAccessSourceFactory: RandomAccessSourceFactory,
+    private val archiveReaderFactory: ComicArchiveReaderFactory,
+    private val comicDao: ComicDao,
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher
+) {
+
+    /**
+     * Retrieves an existing cover file or extracts the first page of the comic into
+     * a downsampled WebP file in the cache directory.
+     */
+    suspend fun getOrExtractCoverFile(
+        comicKey: String,
+        localUri: String?,
+        existingCachePath: String? = null
+    ): File? = withContext(ioDispatcher) {
+        if (!existingCachePath.isNullOrBlank()) {
+            val existingFile = File(existingCachePath)
+            if (existingFile.exists() && existingFile.length() > 0L) {
+                return@withContext existingFile
+            }
+        }
+
+        val coversDir = File(context.cacheDir, "covers")
+        val targetFile = File(coversDir, "$comicKey.webp")
+        if (targetFile.exists() && targetFile.length() > 0L) {
+            return@withContext targetFile
+        }
+
+        if (localUri == null) {
+            return@withContext null
+        }
+
+        try {
+            if (!coversDir.exists()) {
+                coversDir.mkdirs()
+            }
+
+            val source = randomAccessSourceFactory.openLocal(localUri)
+            val reader = archiveReaderFactory.create(source, ComicFormat.CBZ)
+            val page0Bytes = reader.use { r ->
+                val pages = r.getPages()
+                if (pages.isEmpty()) {
+                    return@withContext null
+                }
+                r.openPageBytes(0)
+            }
+
+            val boundsOptions = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            BitmapFactory.decodeByteArray(page0Bytes, 0, page0Bytes.size, boundsOptions)
+
+            val reqWidth = TARGET_COVER_WIDTH_PX
+            val reqHeight = TARGET_COVER_HEIGHT_PX
+            var sampleSize = 1
+            val rawWidth = boundsOptions.outWidth
+            val rawHeight = boundsOptions.outHeight
+
+            if (rawHeight > reqHeight || rawWidth > reqWidth) {
+                val halfHeight = rawHeight / 2
+                val halfWidth = rawWidth / 2
+                while ((halfHeight / sampleSize) >= reqHeight && (halfWidth / sampleSize) >= reqWidth) {
+                    sampleSize *= 2
+                }
+            }
+
+            val decodeOptions = BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+            val bitmap = BitmapFactory.decodeByteArray(page0Bytes, 0, page0Bytes.size, decodeOptions)
+                ?: return@withContext null
+
+            val format = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Bitmap.CompressFormat.WEBP_LOSSY
+            } else {
+                @Suppress("DEPRECATION")
+                Bitmap.CompressFormat.WEBP
+            }
+
+            val tempFile = File.createTempFile("cover_", ".tmp", coversDir)
+            try {
+                tempFile.outputStream().use { out ->
+                    bitmap.compress(format, 80, out)
+                }
+                if (!tempFile.renameTo(targetFile)) {
+                    tempFile.copyTo(targetFile, overwrite = true)
+                    tempFile.delete()
+                }
+            } finally {
+                bitmap.recycle()
+                if (tempFile.exists()) {
+                    tempFile.delete()
+                }
+            }
+
+            comicDao.updateCoverCachePath(comicKey, targetFile.absolutePath)
+            targetFile
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    companion object {
+        private const val TARGET_COVER_WIDTH_PX = 400
+        private const val TARGET_COVER_HEIGHT_PX = 600
+    }
+}
