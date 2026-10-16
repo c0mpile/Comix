@@ -1,4 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Comix</string>
+    <string name="library_title">Comix</string>
+    <string name="action_add_folder">Add folder</string>
+    <string name="action_rescan">Rescan library</string>
+    <string name="action_reauthorize_folder">Re-authorize</string>
+    <string name="action_remove_folder">Remove</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_back">Back</string>
+    <string name="action_close">Close</string>
+
+    <string name="empty_no_folders_title">No comic folders added</string>
+    <string name="empty_no_folders_message">Add a folder containing CBZ comic books to get started.</string>
+    <string name="empty_no_folders_action">Add comic folder</string>
+
+    <string name="empty_no_comics_title">No comics found</string>
+    <string name="empty_no_comics_message">No CBZ comic files were found in your library folders.</string>
+    <string name="empty_no_comics_action_rescan">Rescan folders</string>
+    <string name="empty_no_comics_action_add">Add another folder</string>
+
+    <string name="loading_library">Loading your library...</string>
+    <string name="scanning_library">Scanning for comics...</string>
+
+    <string name="banner_revoked_folders_title">Folder access revoked</string>
+    <string name="banner_revoked_folder_message">Permission to read \"%1$s\" has expired or was revoked.</string>
+
+    <string name="snackbar_skipped_archives">Skipped %1$d unreadable archive(s)</string>
+    <string name="snackbar_dismiss">Dismiss</string>
+    <string name="error_unknown">An unexpected error occurred</string>
+
+    <string name="cover_content_description">Cover for %1$s</string>
+    <string name="cover_placeholder_description">Comic cover placeholder</string>
+    <string name="page_count_single">1 page</string>
+    <string name="page_count_plural">%1$d pages</string>
+    <string name="reading_progress_page">Page %1$d of %2$d</string>
+    <string name="reading_progress_finished">Finished</string>
+
+    <string name="reader_placeholder">Reader for %1$s</string>
 </resources>
