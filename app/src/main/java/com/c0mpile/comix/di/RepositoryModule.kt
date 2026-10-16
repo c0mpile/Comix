@@ -2,8 +2,10 @@ package com.c0mpile.comix.di
 
 import com.c0mpile.comix.data.repository.LibraryRepositoryImpl
 import com.c0mpile.comix.data.repository.ReaderRepositoryImpl
+import com.c0mpile.comix.data.repository.SettingsRepositoryImpl
 import com.c0mpile.comix.domain.repository.LibraryRepository
 import com.c0mpile.comix.domain.repository.ReaderRepository
+import com.c0mpile.comix.domain.repository.SettingsRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -28,4 +30,10 @@ abstract class RepositoryModule {
     abstract fun bindReaderRepository(
         impl: ReaderRepositoryImpl
     ): ReaderRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSettingsRepository(
+        impl: SettingsRepositoryImpl
+    ): SettingsRepository
 }
