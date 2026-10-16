@@ -8,11 +8,14 @@ import com.c0mpile.comix.domain.model.ComicFormat
 import com.c0mpile.comix.domain.model.ComicSourceType
 import com.c0mpile.comix.domain.model.LibraryFolder
 import com.c0mpile.comix.domain.model.ScanResult
+import com.c0mpile.comix.domain.model.UserSettings
 import com.c0mpile.comix.domain.usecase.AddLibraryFolderUseCase
 import com.c0mpile.comix.domain.usecase.ObserveLibraryComicsUseCase
 import com.c0mpile.comix.domain.usecase.ObserveLibraryFoldersUseCase
+import com.c0mpile.comix.domain.usecase.ObserveUserSettingsUseCase
 import com.c0mpile.comix.domain.usecase.RemoveLibraryFolderUseCase
 import com.c0mpile.comix.domain.usecase.RescanLibraryUseCase
+import com.c0mpile.comix.domain.usecase.UpdateLibrarySortOrderUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -44,9 +47,12 @@ class LibraryViewModelTest {
     private val addLibraryFolderUseCase = mockk<AddLibraryFolderUseCase>()
     private val rescanLibraryUseCase = mockk<RescanLibraryUseCase>()
     private val removeLibraryFolderUseCase = mockk<RemoveLibraryFolderUseCase>()
+    private val observeUserSettingsUseCase = mockk<ObserveUserSettingsUseCase>()
+    private val updateLibrarySortOrderUseCase = mockk<UpdateLibrarySortOrderUseCase>()
 
     private val comicsFlow = MutableStateFlow<List<Comic>>(emptyList())
     private val foldersFlow = MutableStateFlow<List<LibraryFolder>>(emptyList())
+    private val userSettingsFlow = MutableStateFlow(UserSettings())
 
     private val testDispatcher = StandardTestDispatcher()
 
@@ -57,13 +63,17 @@ class LibraryViewModelTest {
         Dispatchers.setMain(testDispatcher)
         every { observeLibraryComicsUseCase() } returns comicsFlow
         every { observeLibraryFoldersUseCase() } returns foldersFlow
+        every { observeUserSettingsUseCase() } returns userSettingsFlow
+        coEvery { updateLibrarySortOrderUseCase(any()) } returns Unit
 
         viewModel = LibraryViewModel(
             observeLibraryComicsUseCase = observeLibraryComicsUseCase,
             observeLibraryFoldersUseCase = observeLibraryFoldersUseCase,
             addLibraryFolderUseCase = addLibraryFolderUseCase,
             rescanLibraryUseCase = rescanLibraryUseCase,
-            removeLibraryFolderUseCase = removeLibraryFolderUseCase
+            removeLibraryFolderUseCase = removeLibraryFolderUseCase,
+            observeUserSettingsUseCase = observeUserSettingsUseCase,
+            updateLibrarySortOrderUseCase = updateLibrarySortOrderUseCase
         )
     }
 

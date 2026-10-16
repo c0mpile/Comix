@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -40,6 +41,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import com.c0mpile.comix.R
+import com.c0mpile.comix.domain.model.ReaderScaleMode
+import com.c0mpile.comix.domain.model.ReadingDirection
 import com.c0mpile.comix.ui.theme.ComixDimens
 import com.c0mpile.comix.ui.theme.ComixTheme
 import kotlin.math.roundToInt
@@ -57,7 +60,11 @@ fun ReaderOverlayHud(
     pageCount: Int,
     onPageSelected: (Int) -> Unit,
     onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    readingDirection: ReadingDirection = ReadingDirection.LEFT_TO_RIGHT,
+    scaleMode: ReaderScaleMode = ReaderScaleMode.FIT_SCREEN,
+    onToggleReadingDirection: () -> Unit = {},
+    onToggleScaleMode: () -> Unit = {}
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         AnimatedVisibility(
@@ -85,6 +92,47 @@ fun ReaderOverlayHud(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = stringResource(R.string.action_back)
+                            )
+                        }
+                    },
+                    actions = {
+                        val directionLabel = if (readingDirection == ReadingDirection.LEFT_TO_RIGHT) {
+                            stringResource(R.string.reader_reading_direction_ltr)
+                        } else {
+                            stringResource(R.string.reader_reading_direction_rtl)
+                        }
+                        val directionCd = stringResource(
+                            R.string.reader_reading_direction_toggle_cd,
+                            directionLabel
+                        )
+                        TextButton(
+                            onClick = onToggleReadingDirection,
+                            modifier = Modifier.semantics { contentDescription = directionCd }
+                        ) {
+                            Text(
+                                text = directionLabel,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        val scaleLabel = if (scaleMode == ReaderScaleMode.FIT_SCREEN) {
+                            stringResource(R.string.reader_scale_mode_fit_screen)
+                        } else {
+                            stringResource(R.string.reader_scale_mode_fit_width)
+                        }
+                        val scaleCd = stringResource(
+                            R.string.reader_scale_mode_toggle_cd,
+                            scaleLabel
+                        )
+                        TextButton(
+                            onClick = onToggleScaleMode,
+                            modifier = Modifier.semantics { contentDescription = scaleCd }
+                        ) {
+                            Text(
+                                text = scaleLabel,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     },

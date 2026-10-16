@@ -11,15 +11,20 @@ import com.c0mpile.comix.domain.model.ComicFormat
 import com.c0mpile.comix.domain.model.ComicPage
 import com.c0mpile.comix.domain.model.ComicSourceType
 import com.c0mpile.comix.domain.model.ReadingProgress
+import com.c0mpile.comix.domain.model.UserSettings
 import com.c0mpile.comix.domain.repository.ReaderRepository
 import com.c0mpile.comix.domain.usecase.GetComicUseCase
+import com.c0mpile.comix.domain.usecase.ObserveUserSettingsUseCase
 import com.c0mpile.comix.domain.usecase.SaveReadingProgressUseCase
+import com.c0mpile.comix.domain.usecase.UpdateReaderScaleModeUseCase
+import com.c0mpile.comix.domain.usecase.UpdateReadingDirectionUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -41,12 +46,19 @@ class ReaderViewModelTest {
     private val getComicUseCase = mockk<GetComicUseCase>()
     private val saveReadingProgressUseCase = mockk<SaveReadingProgressUseCase>()
     private val readerRepository = mockk<ReaderRepository>()
+    private val observeUserSettingsUseCase = mockk<ObserveUserSettingsUseCase>()
+    private val updateReaderScaleModeUseCase = mockk<UpdateReaderScaleModeUseCase>()
+    private val updateReadingDirectionUseCase = mockk<UpdateReadingDirectionUseCase>()
 
+    private val userSettingsFlow = MutableStateFlow(UserSettings())
     private val testDispatcher = StandardTestDispatcher()
 
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        every { observeUserSettingsUseCase() } returns userSettingsFlow
+        coEvery { updateReaderScaleModeUseCase(any()) } returns Unit
+        coEvery { updateReadingDirectionUseCase(any()) } returns Unit
     }
 
     @After
@@ -60,7 +72,10 @@ class ReaderViewModelTest {
             savedStateHandle = savedStateHandle,
             getComicUseCase = getComicUseCase,
             saveReadingProgressUseCase = saveReadingProgressUseCase,
-            readerRepository = readerRepository
+            readerRepository = readerRepository,
+            observeUserSettingsUseCase = observeUserSettingsUseCase,
+            updateReaderScaleModeUseCase = updateReaderScaleModeUseCase,
+            updateReadingDirectionUseCase = updateReadingDirectionUseCase
         )
     }
 

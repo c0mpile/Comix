@@ -22,6 +22,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.IntSize
+import com.c0mpile.comix.domain.model.ReaderScaleMode
+import com.c0mpile.comix.domain.model.ReadingDirection
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -37,7 +39,9 @@ fun ZoomablePageImage(
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
     onToggleHud: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    scaleMode: ReaderScaleMode = ReaderScaleMode.FIT_SCREEN,
+    readingDirection: ReadingDirection = ReadingDirection.LEFT_TO_RIGHT
 ) {
     val coroutineScope = rememberCoroutineScope()
     val scaleAnim = remember { Animatable(1f) }
@@ -55,7 +59,7 @@ fun ZoomablePageImage(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .pointerInput(Unit) {
+            .pointerInput(readingDirection) {
                 detectTapGestures(
                     onDoubleTap = { tapOffset ->
                         coroutineScope.launch {
@@ -88,9 +92,23 @@ fun ZoomablePageImage(
                             onToggleHud()
                         } else {
                             val width = size.width
+                            val isLeftTap = tapOffset.x < width * 0.25f
+                            val isRightTap = tapOffset.x > width * 0.75f
                             when {
-                                tapOffset.x < width * 0.25f -> onPreviousPage()
-                                tapOffset.x > width * 0.75f -> onNextPage()
+                                isLeftTap -> {
+                                    if (readingDirection == ReadingDirection.RIGHT_TO_LEFT) {
+                                        onNextPage()
+                                    } else {
+                                        onPreviousPage()
+                                    }
+                                }
+                                isRightTap -> {
+                                    if (readingDirection == ReadingDirection.RIGHT_TO_LEFT) {
+                                        onPreviousPage()
+                                    } else {
+                                        onNextPage()
+                                    }
+                                }
                                 else -> onToggleHud()
                             }
                         }
@@ -175,7 +193,7 @@ fun ZoomablePageImage(
         Image(
             bitmap = bitmap.asImageBitmap(),
             contentDescription = contentDescription,
-            contentScale = ContentScale.Fit,
+            contentScale = if (scaleMode == ReaderScaleMode.FIT_WIDTH) ContentScale.FillWidth else ContentScale.Fit,
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {

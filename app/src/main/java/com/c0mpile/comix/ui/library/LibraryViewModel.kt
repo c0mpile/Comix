@@ -2,12 +2,16 @@ package com.c0mpile.comix.ui.library
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.c0mpile.comix.data.archive.NaturalOrderComparator
 import com.c0mpile.comix.domain.model.ComicError
+import com.c0mpile.comix.domain.model.LibrarySortOrder
 import com.c0mpile.comix.domain.usecase.AddLibraryFolderUseCase
 import com.c0mpile.comix.domain.usecase.ObserveLibraryComicsUseCase
 import com.c0mpile.comix.domain.usecase.ObserveLibraryFoldersUseCase
+import com.c0mpile.comix.domain.usecase.ObserveUserSettingsUseCase
 import com.c0mpile.comix.domain.usecase.RemoveLibraryFolderUseCase
 import com.c0mpile.comix.domain.usecase.RescanLibraryUseCase
+import com.c0mpile.comix.domain.usecase.UpdateLibrarySortOrderUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,7 +23,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * ViewModel managing the Library screen state, folder observation, scanning, and user events.
+ * ViewModel managing the Library screen state, search query filtering, sort orders,
+ * folder observation, scanning, and user events.
  */
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
@@ -27,7 +32,9 @@ class LibraryViewModel @Inject constructor(
     observeLibraryFoldersUseCase: ObserveLibraryFoldersUseCase,
     private val addLibraryFolderUseCase: AddLibraryFolderUseCase,
     private val rescanLibraryUseCase: RescanLibraryUseCase,
-    private val removeLibraryFolderUseCase: RemoveLibraryFolderUseCase
+    private val removeLibraryFolderUseCase: RemoveLibraryFolderUseCase,
+    private val observeUserSettingsUseCase: ObserveUserSettingsUseCase,
+    private val updateLibrarySortOrderUseCase: UpdateLibrarySortOrderUseCase
 ) : ViewModel() {
 
     private data class ScannerState(
@@ -36,22 +43,64 @@ class LibraryViewModel @Inject constructor(
         val scanFailureCount: Int = 0
     )
 
+    private data class SearchState(
+        val query: String = "",
+        val isActive: Boolean = false
+    )
+
     private val scannerState = MutableStateFlow(ScannerState())
+    private val searchState = MutableStateFlow(SearchState())
 
     val uiState: StateFlow<LibraryUiState> = combine(
         observeLibraryComicsUseCase(),
         observeLibraryFoldersUseCase(),
-        scannerState
-    ) { comics, folders, scan ->
+        observeUserSettingsUseCase(),
+        scannerState,
+        searchState
+    ) { rawComics, folders, settings, scan, search ->
+        val totalCount = rawComics.size
         val revoked = folders.filter { !it.hasPersistedPermission }
+
+        val filteredComics = if (search.query.isBlank()) {
+            rawComics
+        } else {
+            rawComics.filter { comic ->
+                comic.title.contains(search.query, ignoreCase = true) ||
+                        comic.fileName.contains(search.query, ignoreCase = true)
+            }
+        }
+
+        val sortedComics = when (settings.librarySortOrder) {
+            LibrarySortOrder.TITLE_ASC -> filteredComics.sortedWith { a, b ->
+                NaturalOrderComparator.compare(a.title, b.title)
+            }
+            LibrarySortOrder.TITLE_DESC -> filteredComics.sortedWith { a, b ->
+                NaturalOrderComparator.compare(b.title, a.title)
+            }
+            LibrarySortOrder.RECENTLY_READ -> filteredComics.sortedWith { a, b ->
+                val timeA = a.progress?.updatedAtEpochMillis ?: 0L
+                val timeB = b.progress?.updatedAtEpochMillis ?: 0L
+                val timeCmp = timeB.compareTo(timeA)
+                if (timeCmp != 0) timeCmp else NaturalOrderComparator.compare(a.title, b.title)
+            }
+            LibrarySortOrder.DATE_ADDED_DESC -> filteredComics.sortedWith { a, b ->
+                val timeCmp = b.lastModifiedEpochMillis.compareTo(a.lastModifiedEpochMillis)
+                if (timeCmp != 0) timeCmp else NaturalOrderComparator.compare(a.title, b.title)
+            }
+        }
+
         LibraryUiState(
-            comics = comics,
+            comics = sortedComics,
             folders = folders,
             isInitialLoading = false,
             isScanning = scan.isScanning,
             revokedFolders = revoked,
             activeError = scan.activeError,
-            scanFailureCount = scan.scanFailureCount
+            scanFailureCount = scan.scanFailureCount,
+            searchQuery = search.query,
+            isSearchActive = search.isActive,
+            sortOrder = settings.librarySortOrder,
+            totalComicCount = totalCount
         )
     }.stateIn(
         scope = viewModelScope,
@@ -126,6 +175,25 @@ class LibraryViewModel @Inject constructor(
             is LibraryUiEvent.DismissError -> {
                 scannerState.update {
                     it.copy(activeError = null, scanFailureCount = 0)
+                }
+            }
+
+            is LibraryUiEvent.SearchQueryChanged -> {
+                searchState.update { it.copy(query = event.query) }
+            }
+
+            is LibraryUiEvent.SearchActiveChanged -> {
+                searchState.update {
+                    it.copy(
+                        isActive = event.active,
+                        query = if (!event.active) "" else it.query
+                    )
+                }
+            }
+
+            is LibraryUiEvent.SortOrderSelected -> {
+                viewModelScope.launch {
+                    updateLibrarySortOrderUseCase(event.sortOrder)
                 }
             }
         }

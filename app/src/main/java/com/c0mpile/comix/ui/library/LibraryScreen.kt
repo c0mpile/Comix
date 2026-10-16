@@ -1,6 +1,7 @@
 package com.c0mpile.comix.ui.library
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -20,12 +21,19 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,18 +46,29 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.c0mpile.comix.R
@@ -59,6 +78,7 @@ import com.c0mpile.comix.domain.model.ComicError
 import com.c0mpile.comix.domain.model.ComicFormat
 import com.c0mpile.comix.domain.model.ComicSourceType
 import com.c0mpile.comix.domain.model.LibraryFolder
+import com.c0mpile.comix.domain.model.LibrarySortOrder
 import com.c0mpile.comix.ui.components.EmptyStateView
 import com.c0mpile.comix.ui.components.LoadingStateView
 import com.c0mpile.comix.ui.theme.ComixDimens
@@ -71,6 +91,7 @@ import com.c0mpile.comix.ui.theme.ComixTheme
 fun LibraryScreen(
     onOpenComic: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenSettings: () -> Unit = {},
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -94,6 +115,7 @@ fun LibraryScreen(
         uiState = uiState,
         onEvent = viewModel::onEvent,
         onAddFolderClick = { folderPickerLauncher.launch(null) },
+        onOpenSettings = onOpenSettings,
         onOpenComic = onOpenComic,
         modifier = modifier
     )
@@ -109,10 +131,23 @@ fun LibraryScreenContent(
     onEvent: (LibraryUiEvent) -> Unit,
     onAddFolderClick: () -> Unit,
     onOpenComic: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenSettings: () -> Unit = {}
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val dismissLabel = stringResource(R.string.snackbar_dismiss)
+    var isSortMenuExpanded by remember { mutableStateOf(false) }
+    val searchFocusRequester = remember { FocusRequester() }
+
+    BackHandler(enabled = uiState.isSearchActive) {
+        onEvent(LibraryUiEvent.SearchActiveChanged(false))
+    }
+
+    LaunchedEffect(uiState.isSearchActive) {
+        if (uiState.isSearchActive) {
+            searchFocusRequester.requestFocus()
+        }
+    }
 
     val skippedMessage = if (uiState.scanFailureCount > 0) {
         stringResource(R.string.snackbar_skipped_archives, uiState.scanFailureCount)
@@ -157,26 +192,124 @@ fun LibraryScreenContent(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
-            TopAppBar(
-                title = { Text(text = stringResource(R.string.library_title)) },
-                actions = {
-                    IconButton(onClick = { onEvent(LibraryUiEvent.RescanRequested) }) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = stringResource(R.string.action_rescan)
+            if (uiState.isSearchActive) {
+                TopAppBar(
+                    navigationIcon = {
+                        IconButton(onClick = { onEvent(LibraryUiEvent.SearchActiveChanged(false)) }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.action_close_search)
+                            )
+                        }
+                    },
+                    title = {
+                        TextField(
+                            value = uiState.searchQuery,
+                            onValueChange = { onEvent(LibraryUiEvent.SearchQueryChanged(it)) },
+                            placeholder = {
+                                Text(
+                                    text = stringResource(R.string.search_hint),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            },
+                            singleLine = true,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                disabledContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(searchFocusRequester)
                         )
-                    }
-                    IconButton(onClick = onAddFolderClick) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = stringResource(R.string.action_add_folder)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    },
+                    actions = {
+                        if (uiState.searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { onEvent(LibraryUiEvent.SearchQueryChanged("")) }) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = stringResource(R.string.action_clear_search)
+                                )
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
                 )
-            )
+            } else {
+                TopAppBar(
+                    title = { Text(text = stringResource(R.string.library_title)) },
+                    actions = {
+                        IconButton(onClick = { onEvent(LibraryUiEvent.SearchActiveChanged(true)) }) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = stringResource(R.string.action_search)
+                            )
+                        }
+                        Box {
+                            IconButton(onClick = { isSortMenuExpanded = true }) {
+                                Icon(
+                                    imageVector = SortIcon,
+                                    contentDescription = stringResource(R.string.action_sort)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = isSortMenuExpanded,
+                                onDismissRequest = { isSortMenuExpanded = false }
+                            ) {
+                                val sortOptions = listOf<Pair<LibrarySortOrder, Int>>(
+                                    LibrarySortOrder.TITLE_ASC to R.string.sort_order_title_asc,
+                                    LibrarySortOrder.TITLE_DESC to R.string.sort_order_title_desc,
+                                    LibrarySortOrder.RECENTLY_READ to R.string.sort_order_recently_read,
+                                    LibrarySortOrder.DATE_ADDED_DESC to R.string.sort_order_date_added_desc
+                                )
+                                for ((order, labelRes) in sortOptions) {
+                                    val isSelected = uiState.sortOrder == order
+                                    DropdownMenuItem(
+                                        text = { Text(text = stringResource(labelRes)) },
+                                        trailingIcon = if (isSelected) {
+                                            {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = null
+                                                )
+                                            }
+                                        } else null,
+                                        onClick = {
+                                            onEvent(LibraryUiEvent.SortOrderSelected(order))
+                                            isSortMenuExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        IconButton(onClick = { onEvent(LibraryUiEvent.RescanRequested) }) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = stringResource(R.string.action_rescan)
+                            )
+                        }
+                        IconButton(onClick = onAddFolderClick) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = stringResource(R.string.action_add_folder)
+                            )
+                        }
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = stringResource(R.string.action_settings)
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+            }
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { innerPadding ->
@@ -221,6 +354,15 @@ fun LibraryScreenContent(
                             message = stringResource(R.string.empty_no_folders_message),
                             actionLabel = stringResource(R.string.empty_no_folders_action),
                             onActionClick = onAddFolderClick
+                        )
+                    }
+
+                    uiState.showEmptySearchResultsState -> {
+                        EmptyStateView(
+                            title = stringResource(R.string.empty_search_title),
+                            message = stringResource(R.string.empty_search_message, uiState.searchQuery),
+                            actionLabel = stringResource(R.string.action_clear_search),
+                            onActionClick = { onEvent(LibraryUiEvent.SearchQueryChanged("")) }
                         )
                     }
 
@@ -360,3 +502,34 @@ private fun LibraryScreenEmptyPreview() {
         )
     }
 }
+
+private val SortIcon: ImageVector
+    get() = ImageVector.Builder(
+        name = "Sort",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = SolidColor(Color.Black)
+    ) {
+        moveTo(3f, 18f)
+        horizontalLineTo(9f)
+        verticalLineToRelative(-2f)
+        horizontalLineTo(3f)
+        verticalLineToRelative(2f)
+        close()
+        moveTo(3f, 6f)
+        verticalLineToRelative(2f)
+        horizontalLineToRelative(18f)
+        verticalLineTo(6f)
+        horizontalLineTo(3f)
+        close()
+        moveTo(3f, 13f)
+        horizontalLineToRelative(12f)
+        verticalLineToRelative(-2f)
+        horizontalLineTo(3f)
+        verticalLineToRelative(2f)
+        close()
+    }.build()
+

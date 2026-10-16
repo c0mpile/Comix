@@ -26,6 +26,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.c0mpile.comix.R
 import com.c0mpile.comix.domain.model.ComicError
+import com.c0mpile.comix.domain.model.ReadingDirection
 import com.c0mpile.comix.ui.components.ErrorStateView
 import com.c0mpile.comix.ui.components.LoadingStateView
 import com.c0mpile.comix.ui.theme.ComixTheme
@@ -63,6 +64,14 @@ fun ReaderScreenContent(
 ) {
     val view = LocalView.current
     val window = (view.context as? Activity)?.window
+
+    DisposableEffect(view, uiState.keepScreenOn) {
+        val previousKeepScreenOn = view.keepScreenOn
+        view.keepScreenOn = uiState.keepScreenOn
+        onDispose {
+            view.keepScreenOn = previousKeepScreenOn
+        }
+    }
 
     if (window != null) {
         DisposableEffect(uiState.isHudVisible, uiState.fatalError) {
@@ -151,6 +160,7 @@ fun ReaderScreenContent(
                 HorizontalPager(
                     state = pagerState,
                     beyondViewportPageCount = 1,
+                    reverseLayout = (uiState.readingDirection == ReadingDirection.RIGHT_TO_LEFT),
                     modifier = Modifier.fillMaxSize()
                 ) { pageIndex ->
                     val pageState = uiState.pageStates[pageIndex] ?: PageLoadState.Idle
@@ -165,6 +175,8 @@ fun ReaderScreenContent(
                                     uiState.pageCount
                                 ),
                                 isCurrentPage = pagerState.currentPage == pageIndex,
+                                scaleMode = uiState.scaleMode,
+                                readingDirection = uiState.readingDirection,
                                 onPreviousPage = {
                                     if (pageIndex > 0) {
                                         coroutineScope.launch {
@@ -213,7 +225,11 @@ fun ReaderScreenContent(
                             pagerState.scrollToPage(targetPage)
                         }
                     },
-                    onNavigateBack = onNavigateBack
+                    onNavigateBack = onNavigateBack,
+                    readingDirection = uiState.readingDirection,
+                    scaleMode = uiState.scaleMode,
+                    onToggleReadingDirection = { onEvent(ReaderUiEvent.ToggleReadingDirection) },
+                    onToggleScaleMode = { onEvent(ReaderUiEvent.ToggleScaleMode) }
                 )
             }
         }

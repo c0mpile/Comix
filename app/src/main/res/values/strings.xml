@@ -11,6 +11,25 @@
     <string name="action_back">Back</string>
     <string name="action_back_to_library">Back to Library</string>
     <string name="action_close">Close</string>
+    <string name="action_settings">Settings</string>
+
+    <string name="action_search">Search</string>
+    <string name="search_hint">Search comics&#8230;</string>
+    <string name="search_placeholder">Search comics&#8230;</string>
+    <string name="action_clear_search">Clear search</string>
+    <string name="action_close_search">Close search</string>
+    <string name="empty_search_title">No matching comics</string>
+    <string name="empty_search_message">Try a different search query.</string>
+
+    <string name="action_sort">Sort library</string>
+    <string name="sort_title_asc">Title (A to Z)</string>
+    <string name="sort_title_desc">Title (Z to A)</string>
+    <string name="sort_recently_read">Recently read</string>
+    <string name="sort_date_added_desc">Date added (newest)</string>
+    <string name="sort_order_title_asc">Title (A to Z)</string>
+    <string name="sort_order_title_desc">Title (Z to A)</string>
+    <string name="sort_order_recently_read">Recently read</string>
+    <string name="sort_order_date_added_desc">Date added (newest)</string>
 
     <string name="empty_no_folders_title">No comic folders added</string>
     <string name="empty_no_folders_message">Add a folder containing CBZ comic books to get started.</string>
@@ -45,6 +64,19 @@
     <string name="reader_page_image_cd">Page %1$d of %2$d</string>
     <string name="reader_loading_archive">Opening comic&#8230;</string>
     <string name="reader_loading_page">Loading page %1$d&#8230;</string>
+
+    <string name="action_scale_mode_fit_screen">Fit screen</string>
+    <string name="action_scale_mode_fit_width">Fit width</string>
+    <string name="action_reading_direction_ltr">Left to right</string>
+    <string name="action_reading_direction_rtl">Right to left</string>
+    <string name="action_toggle_scale_mode_cd">Toggle page scale mode</string>
+    <string name="action_toggle_reading_direction_cd">Toggle reading direction</string>
+    <string name="reader_reading_direction_ltr">LTR</string>
+    <string name="reader_reading_direction_rtl">RTL</string>
+    <string name="reader_reading_direction_toggle_cd">Toggle reading direction, currently %1$s</string>
+    <string name="reader_scale_mode_fit_screen">Fit Screen</string>
+    <string name="reader_scale_mode_fit_width">Fit Width</string>
+    <string name="reader_scale_mode_toggle_cd">Toggle page scale mode, currently %1$s</string>
 
     <string name="error_file_not_found_title">Comic not found</string>
     <string name="error_file_not_found_message">The comic file could not be found at its original location.</string>

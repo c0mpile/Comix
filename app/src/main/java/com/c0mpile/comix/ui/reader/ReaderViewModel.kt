@@ -7,9 +7,14 @@ import androidx.navigation.toRoute
 import com.c0mpile.comix.data.archive.ComicArchiveReader
 import com.c0mpile.comix.data.repository.ComicDomainException
 import com.c0mpile.comix.domain.model.ComicError
+import com.c0mpile.comix.domain.model.ReaderScaleMode
+import com.c0mpile.comix.domain.model.ReadingDirection
 import com.c0mpile.comix.domain.repository.ReaderRepository
 import com.c0mpile.comix.domain.usecase.GetComicUseCase
+import com.c0mpile.comix.domain.usecase.ObserveUserSettingsUseCase
 import com.c0mpile.comix.domain.usecase.SaveReadingProgressUseCase
+import com.c0mpile.comix.domain.usecase.UpdateReaderScaleModeUseCase
+import com.c0mpile.comix.domain.usecase.UpdateReadingDirectionUseCase
 import com.c0mpile.comix.ui.navigation.ReaderRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.IOException
@@ -30,7 +35,10 @@ class ReaderViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val getComicUseCase: GetComicUseCase,
     private val saveReadingProgressUseCase: SaveReadingProgressUseCase,
-    private val readerRepository: ReaderRepository
+    private val readerRepository: ReaderRepository,
+    private val observeUserSettingsUseCase: ObserveUserSettingsUseCase,
+    private val updateReaderScaleModeUseCase: UpdateReaderScaleModeUseCase,
+    private val updateReadingDirectionUseCase: UpdateReadingDirectionUseCase
 ) : ViewModel() {
 
     val comicKey: String = try {
@@ -50,6 +58,17 @@ class ReaderViewModel @Inject constructor(
 
     init {
         loadArchive()
+        viewModelScope.launch {
+            observeUserSettingsUseCase().collect { settings ->
+                _uiState.update {
+                    it.copy(
+                        readingDirection = settings.readingDirection,
+                        scaleMode = settings.readerScaleMode,
+                        keepScreenOn = settings.keepScreenOn
+                    )
+                }
+            }
+        }
     }
 
     fun onEvent(event: ReaderUiEvent) {
@@ -89,6 +108,28 @@ class ReaderViewModel @Inject constructor(
 
             is ReaderUiEvent.RetryOpenArchive -> {
                 loadArchive()
+            }
+
+            is ReaderUiEvent.ToggleScaleMode -> {
+                val nextMode = if (_uiState.value.scaleMode == ReaderScaleMode.FIT_SCREEN) {
+                    ReaderScaleMode.FIT_WIDTH
+                } else {
+                    ReaderScaleMode.FIT_SCREEN
+                }
+                viewModelScope.launch {
+                    updateReaderScaleModeUseCase(nextMode)
+                }
+            }
+
+            is ReaderUiEvent.ToggleReadingDirection -> {
+                val nextDirection = if (_uiState.value.readingDirection == ReadingDirection.LEFT_TO_RIGHT) {
+                    ReadingDirection.RIGHT_TO_LEFT
+                } else {
+                    ReadingDirection.LEFT_TO_RIGHT
+                }
+                viewModelScope.launch {
+                    updateReadingDirectionUseCase(nextDirection)
+                }
             }
         }
     }
