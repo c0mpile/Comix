@@ -6,6 +6,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.c0mpile.comix.domain.model.ComicAvailability
 import com.c0mpile.comix.domain.model.ComicFormat
+import com.c0mpile.comix.domain.model.ComicLibrary
 import com.c0mpile.comix.domain.model.ComicSourceType
 
 /**
@@ -18,7 +19,8 @@ import com.c0mpile.comix.domain.model.ComicSourceType
         Index(value = ["folder_uri"]),
         Index(value = ["local_sample_sha256"]),
         Index(value = ["drive_file_id"]),
-        Index(value = ["drive_md5"])
+        Index(value = ["drive_md5"]),
+        Index(value = ["library_id"])
     ]
 )
 data class ComicEntity(
@@ -66,5 +68,8 @@ data class ComicEntity(
     val driveMd5: String? = null,
 
     @ColumnInfo(name = "cover_cache_path")
-    val coverCachePath: String? = null
+    val coverCachePath: String? = null,
+
+    @ColumnInfo(name = "library_id", defaultValue = "'comics'")
+    val libraryId: String = ComicLibrary.DEFAULT_COMICS_ID
 )

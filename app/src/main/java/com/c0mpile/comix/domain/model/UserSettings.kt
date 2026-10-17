@@ -8,5 +8,6 @@ data class UserSettings(
     val readingDirection: ReadingDirection = ReadingDirection.LEFT_TO_RIGHT,
     val readerScaleMode: ReaderScaleMode = ReaderScaleMode.FIT_SCREEN,
     val keepScreenOn: Boolean = true,
-    val librarySortOrder: LibrarySortOrder = LibrarySortOrder.TITLE_ASC
+    val librarySortOrder: LibrarySortOrder = LibrarySortOrder.TITLE_ASC,
+    val activeLibraryId: String = ComicLibrary.DEFAULT_COMICS_ID
 )

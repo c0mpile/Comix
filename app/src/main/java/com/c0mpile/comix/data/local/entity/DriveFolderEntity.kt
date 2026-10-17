@@ -2,12 +2,17 @@ package com.c0mpile.comix.data.local.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.c0mpile.comix.domain.model.ComicLibrary
 
 /**
  * Room entity representing a user-selected Google Drive root folder in the library.
  */
-@Entity(tableName = "drive_folders")
+@Entity(
+    tableName = "drive_folders",
+    indices = [Index(value = ["library_id"])]
+)
 data class DriveFolderEntity(
     @PrimaryKey
     @ColumnInfo(name = "folder_id")
@@ -23,5 +28,8 @@ data class DriveFolderEntity(
     val lastScannedAtEpochMillis: Long? = null,
 
     @ColumnInfo(name = "drive_id")
-    val driveId: String? = null
+    val driveId: String? = null,
+
+    @ColumnInfo(name = "library_id", defaultValue = "'comics'")
+    val libraryId: String = ComicLibrary.DEFAULT_COMICS_ID
 )

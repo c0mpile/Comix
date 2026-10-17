@@ -49,7 +49,7 @@ fun ComixNavHost(
                     navController.popBackStack()
                 },
                 onNavigateToDriveFolderPicker = {
-                    navController.navigate(DriveFolderPickerRoute)
+                    navController.navigate(DriveFolderPickerRoute())
                 }
             )
         }

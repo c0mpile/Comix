@@ -20,5 +20,6 @@ data class Comic(
     val driveFileId: String? = null,
     val driveMd5: String? = null,
     val coverCachePath: String? = null,
-    val progress: ReadingProgress? = null
+    val progress: ReadingProgress? = null,
+    val libraryId: String = ComicLibrary.DEFAULT_COMICS_ID
 )

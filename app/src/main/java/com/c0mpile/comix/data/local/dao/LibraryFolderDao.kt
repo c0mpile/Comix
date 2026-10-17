@@ -14,8 +14,14 @@ interface LibraryFolderDao {
     @Query("SELECT * FROM library_folders ORDER BY added_at_epoch_millis ASC")
     fun observeFolders(): Flow<List<LibraryFolderEntity>>
 
+    @Query("SELECT * FROM library_folders WHERE library_id = :libraryId ORDER BY added_at_epoch_millis ASC")
+    fun observeFoldersByLibrary(libraryId: String): Flow<List<LibraryFolderEntity>>
+
     @Query("SELECT * FROM library_folders ORDER BY added_at_epoch_millis ASC")
     suspend fun getFolders(): List<LibraryFolderEntity>
+
+    @Query("SELECT * FROM library_folders WHERE library_id = :libraryId ORDER BY added_at_epoch_millis ASC")
+    suspend fun getFoldersByLibrary(libraryId: String): List<LibraryFolderEntity>
 
     @Upsert
     suspend fun upsertFolder(folder: LibraryFolderEntity)
@@ -25,4 +31,7 @@ interface LibraryFolderDao {
 
     @Query("DELETE FROM library_folders WHERE folder_uri = :folderUri")
     suspend fun deleteFolder(folderUri: String)
+
+    @Query("DELETE FROM library_folders WHERE library_id = :libraryId")
+    suspend fun deleteFoldersByLibrary(libraryId: String)
 }

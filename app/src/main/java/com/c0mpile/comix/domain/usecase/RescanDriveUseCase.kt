@@ -10,6 +10,10 @@ import javax.inject.Inject
 class RescanDriveUseCase @Inject constructor(
     private val driveRepository: DriveRepository
 ) {
-    suspend operator fun invoke(): Result<ScanResult> =
-        driveRepository.incrementalSync()
+    suspend operator fun invoke(libraryId: String? = null): Result<ScanResult> =
+        if (libraryId != null) {
+            driveRepository.rescanDriveFoldersForLibrary(libraryId)
+        } else {
+            driveRepository.incrementalSync()
+        }
 }

@@ -2,11 +2,14 @@ package com.c0mpile.comix.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.RoomDatabase
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.c0mpile.comix.data.local.ComixDatabase
 import com.c0mpile.comix.data.local.ComixMigrations
 import com.c0mpile.comix.data.local.dao.ComicDao
 import com.c0mpile.comix.data.local.dao.DriveAccountDao
 import com.c0mpile.comix.data.local.dao.DriveFolderDao
+import com.c0mpile.comix.data.local.dao.LibraryDao
 import com.c0mpile.comix.data.local.dao.LibraryFolderDao
 import com.c0mpile.comix.data.local.dao.ReadingProgressDao
 import dagger.Module
@@ -26,7 +29,20 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): ComixDatabase =
         Room.databaseBuilder(context, ComixDatabase::class.java, "comix.db")
-            .addMigrations(ComixMigrations.MIGRATION_1_2)
+            .addMigrations(ComixMigrations.MIGRATION_1_2, ComixMigrations.MIGRATION_2_3)
+            .addCallback(
+                object : RoomDatabase.Callback() {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        super.onCreate(db)
+                        ComixMigrations.seedDefaultLibraries(db)
+                    }
+
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        super.onOpen(db)
+                        ComixMigrations.seedDefaultLibraries(db)
+                    }
+                }
+            )
             .build()
 
     @Provides
@@ -43,4 +59,7 @@ object DatabaseModule {
 
     @Provides
     fun provideDriveFolderDao(db: ComixDatabase): DriveFolderDao = db.driveFolderDao()
+
+    @Provides
+    fun provideLibraryDao(db: ComixDatabase): LibraryDao = db.libraryDao()
 }

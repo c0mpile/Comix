@@ -17,4 +17,5 @@ interface SettingsRepository {
     suspend fun setReaderScaleMode(scaleMode: ReaderScaleMode)
     suspend fun setKeepScreenOn(enabled: Boolean)
     suspend fun setLibrarySortOrder(sortOrder: LibrarySortOrder)
+    suspend fun setActiveLibraryId(libraryId: String) {}
 }

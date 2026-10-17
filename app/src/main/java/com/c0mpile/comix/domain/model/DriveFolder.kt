@@ -8,5 +8,6 @@ data class DriveFolder(
     val displayName: String,
     val addedAtEpochMillis: Long,
     val lastScannedAtEpochMillis: Long?,
-    val driveId: String? = null
+    val driveId: String? = null,
+    val libraryId: String = ComicLibrary.DEFAULT_COMICS_ID
 )

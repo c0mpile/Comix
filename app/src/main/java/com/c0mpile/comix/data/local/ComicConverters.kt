@@ -4,6 +4,7 @@ import androidx.room.TypeConverter
 import com.c0mpile.comix.domain.model.ComicAvailability
 import com.c0mpile.comix.domain.model.ComicFormat
 import com.c0mpile.comix.domain.model.ComicSourceType
+import com.c0mpile.comix.domain.model.ReadingDirection
 
 /**
  * Room type converters for domain enum types stored as strings.
@@ -27,4 +28,11 @@ class ComicConverters {
 
     @TypeConverter
     fun toComicAvailability(value: String): ComicAvailability = ComicAvailability.valueOf(value)
+
+    @TypeConverter
+    fun fromReadingDirection(value: ReadingDirection): String = value.name
+
+    @TypeConverter
+    fun toReadingDirection(value: String): ReadingDirection =
+        ReadingDirection.entries.find { it.name == value } ?: ReadingDirection.LEFT_TO_RIGHT
 }

@@ -8,5 +8,6 @@ data class LibraryFolder(
     val displayName: String,
     val addedAtEpochMillis: Long,
     val lastScannedAtEpochMillis: Long?,
-    val hasPersistedPermission: Boolean
+    val hasPersistedPermission: Boolean,
+    val libraryId: String = ComicLibrary.DEFAULT_COMICS_ID
 )

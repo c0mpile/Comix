@@ -1,5 +1,6 @@
 package com.c0mpile.comix.ui.navigation
 
+import com.c0mpile.comix.domain.model.ComicLibrary
 import kotlinx.serialization.Serializable
 
 /**
@@ -21,4 +22,4 @@ data object SettingsRoute
  * Route for the Google Drive folder picker screen.
  */
 @Serializable
-data object DriveFolderPickerRoute
+data class DriveFolderPickerRoute(val libraryId: String = ComicLibrary.DEFAULT_COMICS_ID)

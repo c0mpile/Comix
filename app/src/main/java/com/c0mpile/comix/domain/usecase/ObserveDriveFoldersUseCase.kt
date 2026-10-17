@@ -11,5 +11,10 @@ import kotlinx.coroutines.flow.Flow
 class ObserveDriveFoldersUseCase @Inject constructor(
     private val driveRepository: DriveRepository
 ) {
-    operator fun invoke(): Flow<List<DriveFolder>> = driveRepository.observeDriveFolders()
+    operator fun invoke(libraryId: String? = null): Flow<List<DriveFolder>> =
+        if (libraryId != null) {
+            driveRepository.observeDriveFoldersByLibrary(libraryId)
+        } else {
+            driveRepository.observeDriveFolders()
+        }
 }

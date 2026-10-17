@@ -21,13 +21,23 @@ interface DriveRepository {
     ): Result<DriveAccount>
     suspend fun signOut()
     fun observeDriveFolders(): Flow<List<DriveFolder>>
+    fun observeDriveFoldersByLibrary(libraryId: String): Flow<List<DriveFolder>> =
+        observeDriveFolders()
     suspend fun browseSubfolders(parentFolderId: String): Result<List<DriveBrowseItem>>
     suspend fun addDriveFolder(
         folderId: String,
         displayName: String,
         driveId: String? = null
     ): Result<ScanResult>
+    suspend fun addDriveFolder(
+        folderId: String,
+        displayName: String,
+        driveId: String?,
+        libraryId: String
+    ): Result<ScanResult> = addDriveFolder(folderId, displayName, driveId)
     suspend fun removeDriveFolder(folderId: String)
     suspend fun rescanFolder(folderId: String): Result<ScanResult>
+    suspend fun rescanDriveFoldersForLibrary(libraryId: String): Result<ScanResult> =
+        incrementalSync()
     suspend fun incrementalSync(): Result<ScanResult>
 }
