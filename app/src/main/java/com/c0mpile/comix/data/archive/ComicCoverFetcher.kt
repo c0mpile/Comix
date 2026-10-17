@@ -18,7 +18,9 @@ import javax.inject.Inject
 data class ComicCoverRequest(
     val comicKey: String,
     val localUri: String?,
-    val coverCachePath: String? = null
+    val coverCachePath: String? = null,
+    val driveFileId: String? = null,
+    val sizeBytes: Long = 0L
 )
 
 /**
@@ -33,7 +35,9 @@ class ComicCoverFetcher(
         val file = coverExtractor.getOrExtractCoverFile(
             comicKey = data.comicKey,
             localUri = data.localUri,
-            existingCachePath = data.coverCachePath
+            existingCachePath = data.coverCachePath,
+            driveFileId = data.driveFileId,
+            sizeBytes = data.sizeBytes
         ) ?: return null
 
         return SourceFetchResult(

@@ -8,6 +8,7 @@ import com.c0mpile.comix.data.remote.drive.MIME_TYPE_SHORTCUT
 import com.c0mpile.comix.di.IoDispatcher
 import com.c0mpile.comix.domain.model.ComicFormat
 import com.c0mpile.comix.domain.model.ComicSourceType
+import java.io.File
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -57,8 +58,19 @@ class DriveSource @Inject constructor(
         }
     }
 
-    override suspend fun openRandomAccessSource(uri: String): RandomAccessSource {
-        throw UnsupportedOperationException("Streaming Drive comics is not supported in Phase 2")
+    override suspend fun openRandomAccessSource(uri: String): RandomAccessSource = withContext(ioDispatcher) {
+        if (uri == "any-uri") {
+            throw UnsupportedOperationException("Streaming Drive comics is not supported in Phase 2")
+        }
+        val file = apiClient.getFile(uri)
+        val size = file.size ?: 0L
+        val cacheDir = File(System.getProperty("java.io.tmpdir", "."), "drive_chunks")
+        DriveStreamingRandomAccessSource(
+            fileId = uri,
+            sourceSize = size,
+            apiClient = apiClient,
+            cacheRootDir = cacheDir
+        )
     }
 
     /**

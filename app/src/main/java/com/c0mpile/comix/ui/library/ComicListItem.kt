@@ -101,7 +101,9 @@ fun ComicListItem(
                     model = ComicCoverRequest(
                         comicKey = comic.comicKey,
                         localUri = comic.localUri,
-                        coverCachePath = comic.coverCachePath
+                        coverCachePath = comic.coverCachePath,
+                        driveFileId = comic.driveFileId,
+                        sizeBytes = comic.sizeBytes
                     ),
                     contentDescription = stringResource(
                         R.string.cd_comic_cover,

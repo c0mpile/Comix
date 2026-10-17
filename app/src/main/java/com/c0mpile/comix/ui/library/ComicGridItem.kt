@@ -95,7 +95,9 @@ fun ComicGridItem(
                     model = ComicCoverRequest(
                         comicKey = comic.comicKey,
                         localUri = comic.localUri,
-                        coverCachePath = comic.coverCachePath
+                        coverCachePath = comic.coverCachePath,
+                        driveFileId = comic.driveFileId,
+                        sizeBytes = comic.sizeBytes
                     ),
                     contentDescription = stringResource(
                         R.string.cover_content_description,
