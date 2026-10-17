@@ -1,14 +1,20 @@
 package com.c0mpile.comix.ui
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.c0mpile.comix.domain.model.BulkComicMetadataUpdate
 import com.c0mpile.comix.domain.model.Comic
 import com.c0mpile.comix.domain.model.ComicAvailability
 import com.c0mpile.comix.domain.model.ComicFormat
@@ -21,11 +27,13 @@ import com.c0mpile.comix.domain.model.LibraryFolder
 import com.c0mpile.comix.domain.model.LibraryLayoutMode
 import com.c0mpile.comix.domain.model.ReadingDirection
 import com.c0mpile.comix.domain.model.ReadingProgress
+import com.c0mpile.comix.domain.model.SingleComicMetadataUpdate
 import com.c0mpile.comix.ui.library.LibraryScreenContent
 import com.c0mpile.comix.ui.library.LibraryUiEvent
 import com.c0mpile.comix.ui.library.LibraryUiState
 import com.c0mpile.comix.ui.theme.ComixTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -595,7 +603,7 @@ class LibraryScreenTest {
         composeTestRule.onNodeWithText("Brian K. Vaughan").assertIsDisplayed()
         composeTestRule.onNodeWithText("Publisher").assertIsDisplayed()
         composeTestRule.onNodeWithText("Image Comics").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Summary").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Description").assertIsDisplayed()
         composeTestRule.onNodeWithText("Two soldiers from opposite sides fall in love.").assertIsDisplayed()
 
         composeTestRule.onNodeWithText("Close").assertIsDisplayed()
@@ -706,5 +714,360 @@ class LibraryScreenTest {
 
         // Verify we are back to series cards
         composeTestRule.onNodeWithText("Spider-Man").assertIsDisplayed()
+    }
+
+    @Test
+    fun comicDetailsDialogRendersSeparateSeriesAndIssueFields() {
+        val metadata = ComicMetadata(
+            title = "Chapter 1: The Beginning",
+            series = "Saga",
+            number = "1",
+            volume = 1,
+            summary = "Two soldiers from opposite sides fall in love.",
+            writer = "Brian K. Vaughan",
+            penciller = "Fiona Staples",
+            publisher = "Image Comics"
+        )
+
+        val comic = Comic(
+            comicKey = "saga_1",
+            title = "Saga #1",
+            fileName = "saga_01.cbz",
+            format = ComicFormat.CBZ,
+            sourceType = ComicSourceType.LOCAL_SAF,
+            availability = ComicAvailability.LOCAL,
+            sizeBytes = 25_000_000L,
+            lastModifiedEpochMillis = 1000L,
+            pageCount = 44,
+            localUri = "content://tree/saga_01.cbz",
+            folderUri = "content://tree/comics",
+            metadata = metadata
+        )
+
+        val folder = LibraryFolder(
+            folderUri = "content://tree/comics",
+            displayName = "Comics Root",
+            addedAtEpochMillis = 500L,
+            lastScannedAtEpochMillis = 1000L,
+            hasPersistedPermission = true
+        )
+
+        val uiState = LibraryUiState(
+            isInitialLoading = false,
+            folders = listOf(folder),
+            comics = listOf(comic),
+            totalComicCount = 1,
+            selectedComicForDetails = comic
+        )
+
+        composeTestRule.setContent {
+            ComixTheme {
+                LibraryScreenContent(
+                    uiState = uiState,
+                    onEvent = {},
+                    onAddFolderClick = {},
+                    onOpenComic = {}
+                )
+            }
+        }
+
+        // Details dialog title is metadata title
+        composeTestRule.onNodeWithText("Chapter 1: The Beginning").assertIsDisplayed()
+
+        // Separate Series and Issue rows exist
+        composeTestRule.onAllNodesWithText("Series").onFirst().assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("Saga").onFirst().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Issue").assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("1").onFirst().assertIsDisplayed()
+
+        // Confirm there is only one "Saga #1" in the hierarchy (the grid card behind the dialog)
+        composeTestRule.onAllNodesWithText("Saga #1").assertCountEquals(1)
+    }
+
+    @Test
+    fun comicDetailsDialogEditButtonDispatchesOpenMetadataEditorForComic() {
+        var lastDispatchedEvent: LibraryUiEvent? = null
+
+        val comic = Comic(
+            comicKey = "saga_1",
+            title = "Saga #1",
+            fileName = "saga_01.cbz",
+            format = ComicFormat.CBZ,
+            sourceType = ComicSourceType.LOCAL_SAF,
+            availability = ComicAvailability.LOCAL,
+            sizeBytes = 25_000_000L,
+            lastModifiedEpochMillis = 1000L,
+            pageCount = 44,
+            localUri = "content://tree/saga_01.cbz",
+            folderUri = "content://tree/comics"
+        )
+
+        val folder = LibraryFolder(
+            folderUri = "content://tree/comics",
+            displayName = "Comics Root",
+            addedAtEpochMillis = 500L,
+            lastScannedAtEpochMillis = 1000L,
+            hasPersistedPermission = true
+        )
+
+        val uiState = LibraryUiState(
+            isInitialLoading = false,
+            folders = listOf(folder),
+            comics = listOf(comic),
+            totalComicCount = 1,
+            selectedComicForDetails = comic
+        )
+
+        composeTestRule.setContent {
+            ComixTheme {
+                LibraryScreenContent(
+                    uiState = uiState,
+                    onEvent = { lastDispatchedEvent = it },
+                    onAddFolderClick = {},
+                    onOpenComic = {}
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Edit").assertIsDisplayed().performClick()
+        assertEquals(LibraryUiEvent.OpenMetadataEditorForComic(comic), lastDispatchedEvent)
+    }
+
+    @Test
+    fun singleMetadataEditorRendersAllFieldsAndSaveDispatchesSaveSingleMetadata() {
+        var lastDispatchedEvent: LibraryUiEvent? = null
+
+        val metadata = ComicMetadata(
+            title = "Awakening",
+            series = "Monstress",
+            number = "1",
+            volume = 1,
+            releaseYear = 2015,
+            writer = "Marjorie Liu",
+            penciller = "Sana Takeda",
+            publisher = "Image Comics",
+            summary = "A teenage girl survives a cataclysmic war."
+        )
+
+        val comic = Comic(
+            comicKey = "monstress_1",
+            title = "Monstress #1",
+            fileName = "monstress_01.cbz",
+            format = ComicFormat.CBZ,
+            sourceType = ComicSourceType.LOCAL_SAF,
+            availability = ComicAvailability.LOCAL,
+            sizeBytes = 25_000_000L,
+            lastModifiedEpochMillis = 1000L,
+            pageCount = 30,
+            localUri = "content://tree/monstress_01.cbz",
+            folderUri = "content://tree/comics",
+            metadata = metadata
+        )
+
+        val uiState = LibraryUiState(
+            isInitialLoading = false,
+            comics = listOf(comic),
+            totalComicCount = 1,
+            editingMetadataComics = listOf(comic)
+        )
+
+        composeTestRule.setContent {
+            ComixTheme {
+                LibraryScreenContent(
+                    uiState = uiState,
+                    onEvent = { lastDispatchedEvent = it },
+                    onAddFolderClick = {},
+                    onOpenComic = {}
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Edit issue metadata").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("metadata_field_series").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("metadata_field_title").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("metadata_field_issue").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("metadata_field_year").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("metadata_field_writer").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("metadata_field_penciller").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("metadata_field_publisher").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("metadata_field_description").assertIsDisplayed()
+
+        // Edit Series
+        composeTestRule.onNodeWithTag("metadata_field_series").performTextReplacement("Monstress Edited")
+
+        // Click Save
+        composeTestRule.onNodeWithText("Save").performClick()
+
+        assertTrue(lastDispatchedEvent is LibraryUiEvent.SaveSingleMetadata)
+        val update = (lastDispatchedEvent as LibraryUiEvent.SaveSingleMetadata).update
+        assertEquals("monstress_1", update.comicKey)
+        assertEquals("Monstress Edited", update.series)
+        assertEquals("Awakening", update.title)
+        assertEquals("1", update.number)
+        assertEquals(2015, update.releaseYear)
+        assertEquals("Marjorie Liu", update.writer)
+        assertEquals("Sana Takeda", update.penciller)
+        assertEquals("Image Comics", update.publisher)
+        assertEquals("A teenage girl survives a cataclysmic war.", update.summary)
+    }
+
+    @Test
+    fun bulkMetadataEditorRendersSharedFieldsAndSaveDispatchesSaveBulkMetadata() {
+        var lastDispatchedEvent: LibraryUiEvent? = null
+
+        val comic1 = Comic(
+            comicKey = "c1",
+            title = "Comic 1",
+            fileName = "c1.cbz",
+            format = ComicFormat.CBZ,
+            sourceType = ComicSourceType.LOCAL_SAF,
+            availability = ComicAvailability.LOCAL,
+            sizeBytes = 10_000_000L,
+            lastModifiedEpochMillis = 1000L,
+            pageCount = 20,
+            localUri = "content://tree/c1.cbz",
+            folderUri = "content://tree/comics",
+            metadata = ComicMetadata(series = "Shared Series", writer = "Writer 1")
+        )
+
+        val comic2 = Comic(
+            comicKey = "c2",
+            title = "Comic 2",
+            fileName = "c2.cbz",
+            format = ComicFormat.CBZ,
+            sourceType = ComicSourceType.LOCAL_SAF,
+            availability = ComicAvailability.LOCAL,
+            sizeBytes = 10_000_000L,
+            lastModifiedEpochMillis = 1000L,
+            pageCount = 20,
+            localUri = "content://tree/c2.cbz",
+            folderUri = "content://tree/comics",
+            metadata = ComicMetadata(series = "Shared Series", writer = "Writer 2")
+        )
+
+        val uiState = LibraryUiState(
+            isInitialLoading = false,
+            comics = listOf(comic1, comic2),
+            totalComicCount = 2,
+            editingMetadataComics = listOf(comic1, comic2)
+        )
+
+        composeTestRule.setContent {
+            ComixTheme {
+                LibraryScreenContent(
+                    uiState = uiState,
+                    onEvent = { lastDispatchedEvent = it },
+                    onAddFolderClick = {},
+                    onOpenComic = {}
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Edit 2 issues").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("metadata_field_series").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("metadata_field_year").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("metadata_field_writer").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("metadata_field_penciller").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("metadata_field_publisher").assertIsDisplayed()
+
+        // Disallowed bulk fields must not exist
+        composeTestRule.onNodeWithTag("metadata_field_title").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("metadata_field_issue").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("metadata_field_description").assertDoesNotExist()
+
+        // Edit Writer field
+        composeTestRule.onNodeWithTag("metadata_field_writer").performTextReplacement("Common Writer")
+
+        // Click Save
+        composeTestRule.onNodeWithText("Save").performClick()
+
+        assertTrue(lastDispatchedEvent is LibraryUiEvent.SaveBulkMetadata)
+        val update = (lastDispatchedEvent as LibraryUiEvent.SaveBulkMetadata).update
+        assertEquals(listOf("c1", "c2"), update.comicKeys)
+        assertEquals("Common Writer", update.writer)
+        assertTrue(update.updateWriter)
+        assertFalse(update.updateSeries)
+        assertFalse(update.updateReleaseYear)
+        assertFalse(update.updatePenciller)
+        assertFalse(update.updatePublisher)
+    }
+
+    @Test
+    fun selectionModeRendersContextualBarAndHandlesActionsAndLongPressEntersSelectionMode() {
+        var lastDispatchedEvent: LibraryUiEvent? = null
+
+        val comic = Comic(
+            comicKey = "sm_issue_1",
+            title = "Spider-Man #1",
+            fileName = "spiderman_1.cbz",
+            format = ComicFormat.CBZ,
+            sourceType = ComicSourceType.LOCAL_SAF,
+            availability = ComicAvailability.LOCAL,
+            sizeBytes = 25_000_000L,
+            lastModifiedEpochMillis = 1000L,
+            pageCount = 10,
+            localUri = "content://tree/spiderman_1.cbz",
+            folderUri = "content://tree/comics"
+        )
+
+        val folder = LibraryFolder(
+            folderUri = "content://tree/comics",
+            displayName = "Comics Root",
+            addedAtEpochMillis = 500L,
+            lastScannedAtEpochMillis = 1000L,
+            hasPersistedPermission = true
+        )
+
+        val uiStateHolder = androidx.compose.runtime.mutableStateOf(
+            LibraryUiState(
+                isInitialLoading = false,
+                folders = listOf(folder),
+                comics = listOf(comic),
+                totalComicCount = 1,
+                selectedComicKeys = emptySet()
+            )
+        )
+
+        composeTestRule.setContent {
+            ComixTheme {
+                LibraryScreenContent(
+                    uiState = uiStateHolder.value,
+                    onEvent = { event ->
+                        lastDispatchedEvent = event
+                        if (event is LibraryUiEvent.EnterSelectionMode) {
+                            uiStateHolder.value = uiStateHolder.value.copy(
+                                selectedComicKeys = setOf(event.comicKey)
+                            )
+                        } else if (event is LibraryUiEvent.ClearSelection) {
+                            uiStateHolder.value = uiStateHolder.value.copy(
+                                selectedComicKeys = emptySet()
+                            )
+                        }
+                    },
+                    onAddFolderClick = {},
+                    onOpenComic = {}
+                )
+            }
+        }
+
+        // 1. Long-press on comic card enters selection mode
+        composeTestRule.onNodeWithText("Spider-Man #1").performTouchInput { longClick() }
+        assertEquals(LibraryUiEvent.EnterSelectionMode("sm_issue_1"), lastDispatchedEvent)
+
+        // 2. Selection bar controls are displayed
+        composeTestRule.onNodeWithText("1 selected").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Select all").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Edit metadata").assertIsDisplayed()
+
+        // 3. Click "Edit metadata"
+        composeTestRule.onNodeWithContentDescription("Edit metadata").performClick()
+        assertEquals(LibraryUiEvent.OpenMetadataEditorForSelection, lastDispatchedEvent)
+
+        // 4. Click "Clear selection"
+        composeTestRule.onNodeWithContentDescription("Clear selection").performClick()
+        assertEquals(LibraryUiEvent.ClearSelection, lastDispatchedEvent)
+
+        // Contextual bar should be gone
+        composeTestRule.onNodeWithText("1 selected").assertDoesNotExist()
     }
 }

@@ -1,6 +1,9 @@
 package com.c0mpile.comix.ui.library
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,8 +15,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -46,17 +51,31 @@ import com.c0mpile.comix.ui.theme.ComixTheme
 /**
  * List item displaying a comic book with a compact 2:3 thumbnail, title, filename, and progress badges.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ComicListItem(
     comic: Comic,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onInfoClick: (() -> Unit)? = null
+    onInfoClick: (() -> Unit)? = null,
+    isSelectionMode: Boolean = false,
+    isSelected: Boolean = false,
+    onLongClick: (() -> Unit)? = null
 ) {
+    val borderStroke = if (isSelected) {
+        BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+    } else null
+
     Card(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(ComixDimens.cardCornerRadius))
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         shape = RoundedCornerShape(ComixDimens.cardCornerRadius),
+        border = borderStroke,
         elevation = CardDefaults.cardElevation(defaultElevation = ComixDimens.cardElevation),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
@@ -112,6 +131,19 @@ fun ComicListItem(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
+
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = stringResource(R.string.cd_comic_selected, comic.title),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(ComixDimens.spacingXSmall)
+                            .size(24.dp)
+                            .background(MaterialTheme.colorScheme.surface, CircleShape)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(ComixDimens.spacingMedium))
@@ -255,7 +287,7 @@ fun ComicListItem(
                 }
             }
 
-            if (onInfoClick != null) {
+            if (onInfoClick != null && !isSelectionMode) {
                 Spacer(modifier = Modifier.width(ComixDimens.spacingSmall))
                 IconButton(
                     onClick = onInfoClick,

@@ -25,6 +25,12 @@ interface ComicDao {
     @Query("SELECT * FROM comics WHERE comic_key = :comicKey LIMIT 1")
     suspend fun getComicWithProgress(comicKey: String): ComicWithProgressProjection?
 
+    @Query("SELECT * FROM comics WHERE comic_key = :comicKey LIMIT 1")
+    suspend fun getComicByKey(comicKey: String): ComicEntity?
+
+    @Query("SELECT * FROM comics WHERE comic_key IN (:comicKeys)")
+    suspend fun getComicsByKeys(comicKeys: List<String>): List<ComicEntity>
+
     @Query("SELECT * FROM comics WHERE folder_uri = :folderUri")
     suspend fun getComicsByFolder(folderUri: String): List<ComicEntity>
 

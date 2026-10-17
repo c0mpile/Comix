@@ -186,6 +186,10 @@ fun LibraryScreenContent(
         onEvent(LibraryUiEvent.ClearSelectedSeries)
     }
 
+    BackHandler(enabled = uiState.isSelectionMode) {
+        onEvent(LibraryUiEvent.ClearSelection)
+    }
+
     LaunchedEffect(uiState.isSearchActive) {
         if (uiState.isSearchActive) {
             searchFocusRequester.requestFocus()
@@ -280,7 +284,26 @@ fun LibraryScreenContent(
             onReadComic = {
                 onEvent(LibraryUiEvent.DismissComicDetails)
                 onOpenComic(comicForDetails.comicKey)
+            },
+            onEdit = {
+                onEvent(LibraryUiEvent.DismissComicDetails)
+                onEvent(LibraryUiEvent.OpenMetadataEditorForComic(comicForDetails))
             }
+        )
+    }
+
+    val editingComics = uiState.editingMetadataComics
+    if (editingComics != null && editingComics.size == 1) {
+        EditComicMetadataDialog(
+            comic = editingComics.first(),
+            onDismiss = { onEvent(LibraryUiEvent.DismissMetadataEditor) },
+            onSave = { update -> onEvent(LibraryUiEvent.SaveSingleMetadata(update)) }
+        )
+    } else if (editingComics != null && editingComics.size > 1) {
+        BulkEditComicMetadataDialog(
+            comics = editingComics,
+            onDismiss = { onEvent(LibraryUiEvent.DismissMetadataEditor) },
+            onSave = { update -> onEvent(LibraryUiEvent.SaveBulkMetadata(update)) }
         )
     }
 
@@ -357,7 +380,41 @@ fun LibraryScreenContent(
         Scaffold(
             modifier = modifier.fillMaxSize(),
             topBar = {
-                if (uiState.isSearchActive) {
+                if (uiState.isSelectionMode) {
+                    TopAppBar(
+                        navigationIcon = {
+                            IconButton(onClick = { onEvent(LibraryUiEvent.ClearSelection) }) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = stringResource(R.string.cd_clear_selection)
+                                )
+                            }
+                        },
+                        title = {
+                            Text(
+                                text = stringResource(R.string.selection_count, uiState.selectedComicKeys.size),
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                        },
+                        actions = {
+                            IconButton(onClick = { onEvent(LibraryUiEvent.SelectAllComics) }) {
+                                Icon(
+                                    imageVector = SelectAllIcon,
+                                    contentDescription = stringResource(R.string.cd_select_all)
+                                )
+                            }
+                            IconButton(onClick = { onEvent(LibraryUiEvent.OpenMetadataEditorForSelection) }) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = stringResource(R.string.cd_edit_metadata)
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    )
+                } else if (uiState.isSearchActive) {
                     TopAppBar(
                         navigationIcon = {
                             IconButton(onClick = { onEvent(LibraryUiEvent.SearchActiveChanged(false)) }) {
@@ -720,8 +777,21 @@ fun LibraryScreenContent(
                                             ) { comic ->
                                                 ComicGridItem(
                                                     comic = comic,
+                                                    isSelectionMode = uiState.isSelectionMode,
+                                                    isSelected = comic.comicKey in uiState.selectedComicKeys,
                                                     onClick = {
-                                                        onOpenComic(comic.comicKey)
+                                                        if (uiState.isSelectionMode) {
+                                                            onEvent(LibraryUiEvent.ToggleComicSelected(comic.comicKey))
+                                                        } else {
+                                                            onOpenComic(comic.comicKey)
+                                                        }
+                                                    },
+                                                    onLongClick = {
+                                                        if (!uiState.isSelectionMode) {
+                                                            onEvent(LibraryUiEvent.EnterSelectionMode(comic.comicKey))
+                                                        } else {
+                                                            onEvent(LibraryUiEvent.ToggleComicSelected(comic.comicKey))
+                                                        }
                                                     },
                                                     onInfoClick = {
                                                         onEvent(LibraryUiEvent.ShowComicDetails(comic))
@@ -743,8 +813,21 @@ fun LibraryScreenContent(
                                             ) { comic ->
                                                 ComicListItem(
                                                     comic = comic,
+                                                    isSelectionMode = uiState.isSelectionMode,
+                                                    isSelected = comic.comicKey in uiState.selectedComicKeys,
                                                     onClick = {
-                                                        onOpenComic(comic.comicKey)
+                                                        if (uiState.isSelectionMode) {
+                                                            onEvent(LibraryUiEvent.ToggleComicSelected(comic.comicKey))
+                                                        } else {
+                                                            onOpenComic(comic.comicKey)
+                                                        }
+                                                    },
+                                                    onLongClick = {
+                                                        if (!uiState.isSelectionMode) {
+                                                            onEvent(LibraryUiEvent.EnterSelectionMode(comic.comicKey))
+                                                        } else {
+                                                            onEvent(LibraryUiEvent.ToggleComicSelected(comic.comicKey))
+                                                        }
                                                     },
                                                     onInfoClick = {
                                                         onEvent(LibraryUiEvent.ShowComicDetails(comic))
@@ -769,8 +852,21 @@ fun LibraryScreenContent(
                                         ) { comic ->
                                             ComicGridItem(
                                                 comic = comic,
+                                                isSelectionMode = uiState.isSelectionMode,
+                                                isSelected = comic.comicKey in uiState.selectedComicKeys,
                                                 onClick = {
-                                                    onOpenComic(comic.comicKey)
+                                                    if (uiState.isSelectionMode) {
+                                                        onEvent(LibraryUiEvent.ToggleComicSelected(comic.comicKey))
+                                                    } else {
+                                                        onOpenComic(comic.comicKey)
+                                                    }
+                                                },
+                                                onLongClick = {
+                                                    if (!uiState.isSelectionMode) {
+                                                        onEvent(LibraryUiEvent.EnterSelectionMode(comic.comicKey))
+                                                    } else {
+                                                        onEvent(LibraryUiEvent.ToggleComicSelected(comic.comicKey))
+                                                    }
                                                 },
                                                 onInfoClick = {
                                                     onEvent(LibraryUiEvent.ShowComicDetails(comic))
@@ -790,8 +886,21 @@ fun LibraryScreenContent(
                                         ) { comic ->
                                             ComicListItem(
                                                 comic = comic,
+                                                isSelectionMode = uiState.isSelectionMode,
+                                                isSelected = comic.comicKey in uiState.selectedComicKeys,
                                                 onClick = {
-                                                    onOpenComic(comic.comicKey)
+                                                    if (uiState.isSelectionMode) {
+                                                        onEvent(LibraryUiEvent.ToggleComicSelected(comic.comicKey))
+                                                    } else {
+                                                        onOpenComic(comic.comicKey)
+                                                    }
+                                                },
+                                                onLongClick = {
+                                                    if (!uiState.isSelectionMode) {
+                                                        onEvent(LibraryUiEvent.EnterSelectionMode(comic.comicKey))
+                                                    } else {
+                                                        onEvent(LibraryUiEvent.ToggleComicSelected(comic.comicKey))
+                                                    }
                                                 },
                                                 onInfoClick = {
                                                     onEvent(LibraryUiEvent.ShowComicDetails(comic))
@@ -1017,5 +1126,115 @@ private val SortIcon: ImageVector
         verticalLineToRelative(-2f)
         horizontalLineTo(3f)
         verticalLineToRelative(2f)
+        close()
+    }.build()
+
+private val SelectAllIcon: ImageVector
+    get() = ImageVector.Builder(
+        name = "SelectAll",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = SolidColor(Color.Black)
+    ) {
+        moveTo(3f, 5f)
+        horizontalLineToRelative(2f)
+        verticalLineTo(3f)
+        curveToRelative(-1.1f, 0f, -2f, 0.9f, -2f, 2f)
+        close()
+        moveToRelative(0f, 8f)
+        horizontalLineToRelative(2f)
+        verticalLineToRelative(-2f)
+        horizontalLineTo(3f)
+        verticalLineToRelative(2f)
+        close()
+        moveToRelative(4f, 8f)
+        horizontalLineToRelative(2f)
+        verticalLineToRelative(-2f)
+        horizontalLineTo(7f)
+        verticalLineToRelative(2f)
+        close()
+        moveTo(3f, 9f)
+        horizontalLineToRelative(2f)
+        verticalLineTo(7f)
+        horizontalLineTo(3f)
+        verticalLineToRelative(2f)
+        close()
+        moveToRelative(10f, -6f)
+        horizontalLineToRelative(-2f)
+        verticalLineToRelative(2f)
+        horizontalLineToRelative(2f)
+        verticalLineTo(3f)
+        close()
+        moveToRelative(6f, 0f)
+        verticalLineToRelative(2f)
+        horizontalLineToRelative(2f)
+        curveToRelative(0f, -1.1f, -0.9f, -2f, -2f, -2f)
+        close()
+        moveToRelative(-10f, 0f)
+        horizontalLineTo(7f)
+        verticalLineToRelative(2f)
+        horizontalLineToRelative(2f)
+        verticalLineTo(3f)
+        close()
+        moveToRelative(10f, 18f)
+        curveToRelative(1.1f, 0f, 2f, -0.9f, 2f, -2f)
+        horizontalLineToRelative(-2f)
+        verticalLineToRelative(2f)
+        close()
+        moveTo(7f, 17f)
+        horizontalLineToRelative(10f)
+        verticalLineTo(7f)
+        horizontalLineTo(7f)
+        verticalLineToRelative(10f)
+        close()
+        moveToRelative(2f, -8f)
+        horizontalLineToRelative(6f)
+        verticalLineToRelative(6f)
+        horizontalLineTo(9f)
+        verticalLineTo(9f)
+        close()
+        moveToRelative(-6f, 8f)
+        horizontalLineToRelative(2f)
+        verticalLineToRelative(-2f)
+        horizontalLineTo(3f)
+        verticalLineToRelative(2f)
+        close()
+        moveToRelative(16f, -8f)
+        verticalLineToRelative(2f)
+        horizontalLineToRelative(2f)
+        verticalLineToRelative(-2f)
+        horizontalLineToRelative(-2f)
+        close()
+        moveToRelative(0f, -4f)
+        verticalLineToRelative(2f)
+        horizontalLineToRelative(2f)
+        verticalLineTo(7f)
+        horizontalLineToRelative(-2f)
+        close()
+        moveToRelative(0f, 8f)
+        verticalLineToRelative(2f)
+        horizontalLineToRelative(2f)
+        verticalLineToRelative(-2f)
+        horizontalLineToRelative(-2f)
+        close()
+        moveToRelative(-4f, 4f)
+        horizontalLineToRelative(2f)
+        verticalLineToRelative(-2f)
+        horizontalLineToRelative(-2f)
+        verticalLineToRelative(2f)
+        close()
+        moveToRelative(-4f, 0f)
+        horizontalLineToRelative(2f)
+        verticalLineToRelative(-2f)
+        horizontalLineToRelative(-2f)
+        verticalLineToRelative(2f)
+        close()
+        moveToRelative(-6f, 0f)
+        curveToRelative(-1.1f, 0f, -2f, 0.9f, -2f, 2f)
+        horizontalLineToRelative(2f)
+        verticalLineToRelative(-2f)
         close()
     }.build()

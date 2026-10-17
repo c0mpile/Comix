@@ -1,6 +1,7 @@
 package com.c0mpile.comix.ui.library
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,7 +35,8 @@ fun ComicDetailsDialog(
     comic: Comic,
     onDismiss: () -> Unit,
     onReadComic: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onEdit: (() -> Unit)? = null
 ) {
     val metadata = comic.metadata
 
@@ -54,11 +56,39 @@ fun ComicDetailsDialog(
                     .verticalScroll(rememberScrollState())
             ) {
                 if (metadata != null) {
-                    val seriesAndNumber = metadata.formattedSeriesAndNumber
-                    if (!seriesAndNumber.isNullOrBlank()) {
+                    if (!metadata.series.isNullOrBlank()) {
                         MetadataFieldRow(
                             label = stringResource(R.string.comic_details_series),
-                            value = seriesAndNumber
+                            value = metadata.series
+                        )
+                    }
+
+                    if (metadata.volume != null && metadata.volume > 0) {
+                        MetadataFieldRow(
+                            label = stringResource(R.string.comic_details_volume),
+                            value = metadata.volume.toString()
+                        )
+                    }
+
+                    if (!metadata.number.isNullOrBlank()) {
+                        MetadataFieldRow(
+                            label = stringResource(R.string.comic_details_issue),
+                            value = metadata.number
+                        )
+                    }
+
+                    if (metadata.releaseMonth != null || metadata.releaseDay != null) {
+                        val releaseDate = metadata.formattedReleaseDate
+                        if (!releaseDate.isNullOrBlank()) {
+                            MetadataFieldRow(
+                                label = stringResource(R.string.comic_details_release_date),
+                                value = releaseDate
+                            )
+                        }
+                    } else if (metadata.releaseYear != null && metadata.releaseYear > 0) {
+                        MetadataFieldRow(
+                            label = stringResource(R.string.comic_details_year),
+                            value = metadata.releaseYear.toString()
                         )
                     }
 
@@ -80,14 +110,6 @@ fun ComicDetailsDialog(
                         MetadataFieldRow(
                             label = stringResource(R.string.comic_details_publisher),
                             value = metadata.publisher
-                        )
-                    }
-
-                    val releaseDate = metadata.formattedReleaseDate
-                    if (!releaseDate.isNullOrBlank()) {
-                        MetadataFieldRow(
-                            label = stringResource(R.string.comic_details_release_date),
-                            value = releaseDate
                         )
                     }
 
@@ -139,8 +161,15 @@ fun ComicDetailsDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = stringResource(R.string.action_close))
+            Row {
+                if (onEdit != null) {
+                    TextButton(onClick = onEdit) {
+                        Text(text = stringResource(R.string.action_edit))
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(text = stringResource(R.string.action_close))
+                }
             }
         }
     )
