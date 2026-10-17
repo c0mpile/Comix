@@ -4,6 +4,7 @@ import androidx.room.testing.MigrationTestHelper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -253,5 +254,135 @@ class MigrationTest {
         libraryCursor.close()
 
         dbV3.close()
+    }
+
+    @Test
+    fun migrate3To4AddsMetadataColumnsAndPreservesRows() {
+        val dbV3 = helper.createDatabase(TEST_DB, 3)
+
+        dbV3.execSQL(
+            """
+            INSERT INTO comics (
+                comic_key, title, file_name, format, source_type, availability,
+                size_bytes, last_modified_epoch_millis, page_count, local_uri, folder_uri, library_id
+            ) VALUES (
+                'local:comic3', 'Saga #1', 'saga_01.cbz', 'CBZ',
+                'LOCAL_SAF', 'LOCAL', 15000000, 1700000000000, 44,
+                'content://com.android.externalstorage.documents/tree/comics/saga_01.cbz',
+                'content://com.android.externalstorage.documents/tree/comics', 'comics'
+            )
+            """.trimIndent()
+        )
+
+        dbV3.close()
+
+        val dbV4 = helper.runMigrationsAndValidate(TEST_DB, 4, true, ComixMigrations.MIGRATION_3_4)
+
+        val comicCursor = dbV4.query(
+            "SELECT comic_key, title, library_id, meta_title, meta_series, meta_number, meta_volume, meta_summary, meta_writer, meta_penciller, meta_publisher, meta_genre, meta_release_year, meta_release_month, meta_release_day FROM comics WHERE comic_key = 'local:comic3'"
+        )
+        assertTrue(comicCursor.moveToFirst())
+        assertEquals("local:comic3", comicCursor.getString(0))
+        assertEquals("Saga #1", comicCursor.getString(1))
+        assertEquals("comics", comicCursor.getString(2))
+        assertNull(comicCursor.getString(3))
+        assertNull(comicCursor.getString(4))
+        assertNull(comicCursor.getString(5))
+        assertTrue(comicCursor.isNull(6))
+        assertNull(comicCursor.getString(7))
+        assertNull(comicCursor.getString(8))
+        assertNull(comicCursor.getString(9))
+        assertNull(comicCursor.getString(10))
+        assertNull(comicCursor.getString(11))
+        assertTrue(comicCursor.isNull(12))
+        assertTrue(comicCursor.isNull(13))
+        assertTrue(comicCursor.isNull(14))
+        comicCursor.close()
+
+        dbV4.execSQL(
+            """
+            UPDATE comics SET
+                meta_title = 'Chapter One',
+                meta_series = 'Saga',
+                meta_number = '1',
+                meta_volume = 1,
+                meta_summary = 'An epic space opera',
+                meta_writer = 'Brian K. Vaughan',
+                meta_penciller = 'Fiona Staples',
+                meta_publisher = 'Image Comics',
+                meta_genre = 'Sci-Fi / Fantasy',
+                meta_release_year = 2012,
+                meta_release_month = 3,
+                meta_release_day = 14
+            WHERE comic_key = 'local:comic3'
+            """.trimIndent()
+        )
+
+        val updatedCursor = dbV4.query(
+            "SELECT meta_title, meta_series, meta_number, meta_volume, meta_summary, meta_writer, meta_penciller, meta_publisher, meta_genre, meta_release_year, meta_release_month, meta_release_day FROM comics WHERE comic_key = 'local:comic3'"
+        )
+        assertTrue(updatedCursor.moveToFirst())
+        assertEquals("Chapter One", updatedCursor.getString(0))
+        assertEquals("Saga", updatedCursor.getString(1))
+        assertEquals("1", updatedCursor.getString(2))
+        assertEquals(1, updatedCursor.getInt(3))
+        assertEquals("An epic space opera", updatedCursor.getString(4))
+        assertEquals("Brian K. Vaughan", updatedCursor.getString(5))
+        assertEquals("Fiona Staples", updatedCursor.getString(6))
+        assertEquals("Image Comics", updatedCursor.getString(7))
+        assertEquals("Sci-Fi / Fantasy", updatedCursor.getString(8))
+        assertEquals(2012, updatedCursor.getInt(9))
+        assertEquals(3, updatedCursor.getInt(10))
+        assertEquals(14, updatedCursor.getInt(11))
+        updatedCursor.close()
+
+        dbV4.close()
+    }
+
+    @Test
+    fun migrate1To4FullChainSucceeds() {
+        val dbV1 = helper.createDatabase(TEST_DB, 1)
+
+        dbV1.execSQL(
+            """
+            INSERT INTO comics (
+                comic_key, title, file_name, format, source_type, availability,
+                size_bytes, last_modified_epoch_millis, page_count, local_uri, folder_uri
+            ) VALUES (
+                'local:comic1', 'Amazing Spider-Man #1', 'spiderman_01.cbz', 'CBZ',
+                'LOCAL_SAF', 'LOCAL', 1048576, 1700000000000, 24,
+                'content://com.android.externalstorage.documents/tree/comics/spiderman_01.cbz',
+                'content://com.android.externalstorage.documents/tree/comics'
+            )
+            """.trimIndent()
+        )
+
+        dbV1.close()
+
+        val dbV4 = helper.runMigrationsAndValidate(
+            TEST_DB,
+            4,
+            true,
+            ComixMigrations.MIGRATION_1_2,
+            ComixMigrations.MIGRATION_2_3,
+            ComixMigrations.MIGRATION_3_4
+        )
+
+        val comicCursor = dbV4.query(
+            "SELECT comic_key, title, library_id, meta_series FROM comics WHERE comic_key = 'local:comic1'"
+        )
+        assertTrue(comicCursor.moveToFirst())
+        assertEquals("local:comic1", comicCursor.getString(0))
+        assertEquals("Amazing Spider-Man #1", comicCursor.getString(1))
+        assertEquals("comics", comicCursor.getString(2))
+        assertNull(comicCursor.getString(3))
+        comicCursor.close()
+
+        val libraryCursor = dbV4.query("SELECT COUNT(*) FROM libraries")
+        assertTrue(libraryCursor.moveToFirst())
+        assertEquals(2, libraryCursor.getInt(0))
+        libraryCursor.close()
+
+        dbV4.close()
     }
 }

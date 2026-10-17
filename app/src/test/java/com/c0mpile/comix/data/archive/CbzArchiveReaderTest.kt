@@ -10,6 +10,8 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -286,6 +288,62 @@ class CbzArchiveReaderTest {
         } catch (expected: IllegalArgumentException) {
             assertTrue(source.isClosed)
         }
+    }
+
+    @Test
+    fun extractMetadataParsesComicInfoXmlWhenPresentAndReturnsNullWhenAbsent() = runTest(testDispatcher) {
+        val comicInfoXml = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <ComicInfo>
+                <Title>Chapter 1: The Beginning</Title>
+                <Series>Saga</Series>
+                <Number>1</Number>
+                <Writer>Brian K. Vaughan</Writer>
+                <Penciller>Fiona Staples</Penciller>
+                <Publisher>Image Comics</Publisher>
+                <Year>2012</Year>
+                <Month>3</Month>
+            </ComicInfo>
+        """.trimIndent().toByteArray(Charsets.UTF_8)
+
+        val imageBytes = "Image binary content".toByteArray()
+
+        val zipWithMetadata = createZipArchive(
+            TestZipEntry("page01.jpg", imageBytes),
+            TestZipEntry("page02.jpg", imageBytes),
+            TestZipEntry("ComicInfo.xml", comicInfoXml)
+        )
+
+        val sourceWithMetadata = ByteArrayRandomAccessSource(zipWithMetadata)
+        val readerWithMetadata = factory.create(sourceWithMetadata, ComicFormat.CBZ, "saga_01.cbz")
+
+        val metadata = readerWithMetadata.extractMetadata()
+        assertNotNull(metadata)
+        assertEquals("Chapter 1: The Beginning", metadata?.title)
+        assertEquals("Saga", metadata?.series)
+        assertEquals("1", metadata?.number)
+        assertEquals("Brian K. Vaughan", metadata?.writer)
+        assertEquals("Fiona Staples", metadata?.penciller)
+        assertEquals("Image Comics", metadata?.publisher)
+        assertEquals(2012, metadata?.releaseYear)
+        assertEquals(3, metadata?.releaseMonth)
+        assertEquals("Saga #1", metadata?.formattedSeriesAndNumber)
+        assertEquals("2012-03", metadata?.formattedReleaseDate)
+
+        readerWithMetadata.close()
+
+        val zipWithoutMetadata = createZipArchive(
+            TestZipEntry("page01.jpg", imageBytes),
+            TestZipEntry("page02.jpg", imageBytes)
+        )
+
+        val sourceWithoutMetadata = ByteArrayRandomAccessSource(zipWithoutMetadata)
+        val readerWithoutMetadata = factory.create(sourceWithoutMetadata, ComicFormat.CBZ, "no_meta.cbz")
+
+        val absentMetadata = readerWithoutMetadata.extractMetadata()
+        assertNull(absentMetadata)
+
+        readerWithoutMetadata.close()
     }
 }
 

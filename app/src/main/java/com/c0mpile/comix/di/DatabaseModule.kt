@@ -29,7 +29,11 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): ComixDatabase =
         Room.databaseBuilder(context, ComixDatabase::class.java, "comix.db")
-            .addMigrations(ComixMigrations.MIGRATION_1_2, ComixMigrations.MIGRATION_2_3)
+            .addMigrations(
+                ComixMigrations.MIGRATION_1_2,
+                ComixMigrations.MIGRATION_2_3,
+                ComixMigrations.MIGRATION_3_4
+            )
             .addCallback(
                 object : RoomDatabase.Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {

@@ -55,6 +55,27 @@ object ComixMigrations {
     }
 
     /**
+     * Migrates from schema version 3 to version 4 by adding nullable embedded metadata
+     * columns to the `comics` table.
+     */
+    val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `comics` ADD COLUMN `meta_title` TEXT")
+            db.execSQL("ALTER TABLE `comics` ADD COLUMN `meta_series` TEXT")
+            db.execSQL("ALTER TABLE `comics` ADD COLUMN `meta_number` TEXT")
+            db.execSQL("ALTER TABLE `comics` ADD COLUMN `meta_volume` INTEGER")
+            db.execSQL("ALTER TABLE `comics` ADD COLUMN `meta_summary` TEXT")
+            db.execSQL("ALTER TABLE `comics` ADD COLUMN `meta_writer` TEXT")
+            db.execSQL("ALTER TABLE `comics` ADD COLUMN `meta_penciller` TEXT")
+            db.execSQL("ALTER TABLE `comics` ADD COLUMN `meta_publisher` TEXT")
+            db.execSQL("ALTER TABLE `comics` ADD COLUMN `meta_genre` TEXT")
+            db.execSQL("ALTER TABLE `comics` ADD COLUMN `meta_release_year` INTEGER")
+            db.execSQL("ALTER TABLE `comics` ADD COLUMN `meta_release_month` INTEGER")
+            db.execSQL("ALTER TABLE `comics` ADD COLUMN `meta_release_day` INTEGER")
+        }
+    }
+
+    /**
      * Seeds the built-in Comics (`LEFT_TO_RIGHT`) and Manga (`RIGHT_TO_LEFT`) libraries
      * when the `libraries` table is empty.
      */

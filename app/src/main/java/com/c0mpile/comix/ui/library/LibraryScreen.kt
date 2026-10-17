@@ -261,6 +261,27 @@ fun LibraryScreenContent(
         )
     }
 
+    val comicForDetails = uiState.selectedComicForDetails
+    if (comicForDetails != null) {
+        ComicDetailsDialog(
+            comic = comicForDetails,
+            onDismiss = { onEvent(LibraryUiEvent.DismissComicDetails) },
+            onReadComic = {
+                onEvent(LibraryUiEvent.DismissComicDetails)
+                if (comicForDetails.availability == ComicAvailability.REMOTE) {
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar(
+                            message = driveReadingUnavailableMessage,
+                            duration = SnackbarDuration.Short
+                        )
+                    }
+                } else {
+                    onOpenComic(comicForDetails.comicKey)
+                }
+            }
+        )
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -649,6 +670,9 @@ fun LibraryScreenContent(
                                                 } else {
                                                     onOpenComic(comic.comicKey)
                                                 }
+                                            },
+                                            onInfoClick = {
+                                                onEvent(LibraryUiEvent.ShowComicDetails(comic))
                                             }
                                         )
                                     }
@@ -676,6 +700,9 @@ fun LibraryScreenContent(
                                                 } else {
                                                     onOpenComic(comic.comicKey)
                                                 }
+                                            },
+                                            onInfoClick = {
+                                                onEvent(LibraryUiEvent.ShowComicDetails(comic))
                                             }
                                         )
                                     }

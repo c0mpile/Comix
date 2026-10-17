@@ -19,7 +19,9 @@ import com.c0mpile.comix.di.IoDispatcher
 import com.c0mpile.comix.domain.model.Comic
 import com.c0mpile.comix.domain.model.ComicAvailability
 import com.c0mpile.comix.domain.model.ComicError
+import com.c0mpile.comix.domain.model.ComicFormat
 import com.c0mpile.comix.domain.model.ComicLibrary
+import com.c0mpile.comix.domain.model.ComicMetadata
 import com.c0mpile.comix.domain.model.ComicSourceType
 import com.c0mpile.comix.domain.model.LibraryFolder
 import com.c0mpile.comix.domain.model.ReadingDirection
@@ -363,10 +365,12 @@ class LibraryRepositoryImpl @Inject constructor(
                 continue
             }
 
-            val pageCount = try {
+            val (pageCount, metadata) = try {
                 val archiveSource = comicSource.openRandomAccessSource(file.uri)
                 val reader = archiveReaderFactory.create(archiveSource, file.format, file.fileName)
-                reader.use { it.getPages().size }
+                reader.use {
+                    Pair(it.getPages().size, it.extractMetadata())
+                }
             } catch (e: CorruptArchiveException) {
                 skippedCorrupt++
                 errors.add(ComicError.CorruptArchive(file.fileName, e.reason))
@@ -409,7 +413,19 @@ class LibraryRepositoryImpl @Inject constructor(
                 driveFileId = existingByHash?.driveFileId,
                 driveMd5 = existingByHash?.driveMd5,
                 coverCachePath = coverCachePath,
-                libraryId = libraryId
+                libraryId = libraryId,
+                metaTitle = metadata?.title,
+                metaSeries = metadata?.series,
+                metaNumber = metadata?.number,
+                metaVolume = metadata?.volume,
+                metaSummary = metadata?.summary,
+                metaWriter = metadata?.writer,
+                metaPenciller = metadata?.penciller,
+                metaPublisher = metadata?.publisher,
+                metaGenre = metadata?.genre,
+                metaReleaseYear = metadata?.releaseYear,
+                metaReleaseMonth = metadata?.releaseMonth,
+                metaReleaseDay = metadata?.releaseDay
             )
 
             comicDao.upsertComic(entity)
@@ -435,24 +451,42 @@ class LibraryRepositoryImpl @Inject constructor(
         )
     }
 
-    private fun ComicWithProgressProjection.toDomain(): Comic = Comic(
-        comicKey = comic.comicKey,
-        title = comic.title,
-        fileName = comic.fileName,
-        format = comic.format,
-        sourceType = comic.sourceType,
-        availability = comic.availability,
-        sizeBytes = comic.sizeBytes,
-        lastModifiedEpochMillis = comic.lastModifiedEpochMillis,
-        pageCount = comic.pageCount,
-        localUri = comic.localUri,
-        folderUri = comic.folderUri,
-        driveFileId = comic.driveFileId,
-        driveMd5 = comic.driveMd5,
-        coverCachePath = comic.coverCachePath,
-        progress = progress?.toDomain(),
-        libraryId = comic.libraryId
-    )
+    private fun ComicWithProgressProjection.toDomain(): Comic {
+        val metadata = ComicMetadata(
+            title = comic.metaTitle,
+            series = comic.metaSeries,
+            number = comic.metaNumber,
+            volume = comic.metaVolume,
+            summary = comic.metaSummary,
+            writer = comic.metaWriter,
+            penciller = comic.metaPenciller,
+            publisher = comic.metaPublisher,
+            genre = comic.metaGenre,
+            releaseYear = comic.metaReleaseYear,
+            releaseMonth = comic.metaReleaseMonth,
+            releaseDay = comic.metaReleaseDay
+        ).takeIf { it.hasAnyMetadata }
+
+        return Comic(
+            comicKey = comic.comicKey,
+            title = comic.title,
+            fileName = comic.fileName,
+            format = comic.format,
+            sourceType = comic.sourceType,
+            availability = comic.availability,
+            sizeBytes = comic.sizeBytes,
+            lastModifiedEpochMillis = comic.lastModifiedEpochMillis,
+            pageCount = comic.pageCount,
+            localUri = comic.localUri,
+            folderUri = comic.folderUri,
+            driveFileId = comic.driveFileId,
+            driveMd5 = comic.driveMd5,
+            coverCachePath = comic.coverCachePath,
+            progress = progress?.toDomain(),
+            libraryId = comic.libraryId,
+            metadata = metadata
+        )
+    }
 
     private fun ReadingProgressEntity.toDomain(): ReadingProgress = ReadingProgress(
         comicKey = comicKey,

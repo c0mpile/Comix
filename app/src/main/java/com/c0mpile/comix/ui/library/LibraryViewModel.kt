@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.c0mpile.comix.data.archive.NaturalOrderComparator
 import com.c0mpile.comix.data.remote.drive.DriveApiException
+import com.c0mpile.comix.domain.model.Comic
 import com.c0mpile.comix.domain.model.ComicError
 import com.c0mpile.comix.domain.model.ComicLibrary
 import com.c0mpile.comix.domain.model.LibraryFilterTab
@@ -74,6 +75,7 @@ class LibraryViewModel @Inject constructor(
 
     private val scannerState = MutableStateFlow(ScannerState())
     private val searchAndFilterState = MutableStateFlow(SearchAndFilterState())
+    private val selectedComicForDetails = MutableStateFlow<Comic?>(null)
 
     private val activeLibraryFlow = combine(
         observeLibrariesUseCase(),
@@ -94,8 +96,8 @@ class LibraryViewModel @Inject constructor(
             observeLibraryFoldersUseCase(activeId),
             observeDriveFoldersUseCase(activeId),
             observeUserSettingsUseCase(),
-            combine(scannerState, searchAndFilterState, ::Pair)
-        ) { rawComics, folders, driveFolders, settings, (scan, filter) ->
+            combine(scannerState, searchAndFilterState, selectedComicForDetails, ::Triple)
+        ) { rawComics, folders, driveFolders, settings, (scan, filter, detailsComic) ->
             val totalCount = rawComics.size
             val revoked = folders.filter { !it.hasPersistedPermission }
 
@@ -110,7 +112,12 @@ class LibraryViewModel @Inject constructor(
             } else {
                 tabFilteredComics.filter { comic ->
                     comic.title.contains(filter.query, ignoreCase = true) ||
-                            comic.fileName.contains(filter.query, ignoreCase = true)
+                            comic.fileName.contains(filter.query, ignoreCase = true) ||
+                            comic.metadata?.title?.contains(filter.query, ignoreCase = true) == true ||
+                            comic.metadata?.series?.contains(filter.query, ignoreCase = true) == true ||
+                            comic.metadata?.writer?.contains(filter.query, ignoreCase = true) == true ||
+                            comic.metadata?.publisher?.contains(filter.query, ignoreCase = true) == true ||
+                            comic.metadata?.genre?.contains(filter.query, ignoreCase = true) == true
                 }
             }
 
@@ -149,7 +156,8 @@ class LibraryViewModel @Inject constructor(
                 searchQuery = filter.query,
                 isSearchActive = filter.isActive,
                 sortOrder = settings.librarySortOrder,
-                totalComicCount = totalCount
+                totalComicCount = totalCount,
+                selectedComicForDetails = detailsComic
             )
         }
     }.stateIn(
@@ -332,6 +340,14 @@ class LibraryViewModel @Inject constructor(
                     }
                     updateLibraryLayoutModeUseCase(nextMode)
                 }
+            }
+
+            is LibraryUiEvent.ShowComicDetails -> {
+                selectedComicForDetails.value = event.comic
+            }
+
+            is LibraryUiEvent.DismissComicDetails -> {
+                selectedComicForDetails.value = null
             }
         }
     }

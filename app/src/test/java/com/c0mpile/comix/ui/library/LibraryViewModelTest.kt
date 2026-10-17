@@ -7,6 +7,7 @@ import com.c0mpile.comix.domain.model.ComicAvailability
 import com.c0mpile.comix.domain.model.ComicError
 import com.c0mpile.comix.domain.model.ComicFormat
 import com.c0mpile.comix.domain.model.ComicLibrary
+import com.c0mpile.comix.domain.model.ComicMetadata
 import com.c0mpile.comix.domain.model.ComicSourceType
 import com.c0mpile.comix.domain.model.DriveFolder
 import com.c0mpile.comix.domain.model.LibraryFilterTab
@@ -740,6 +741,64 @@ class LibraryViewModelTest {
             testScheduler.advanceUntilIdle()
 
             coVerify(exactly = 1) { updateLibraryLayoutModeUseCase(LibraryLayoutMode.GRID) }
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun comicDetailsEventsUpdateSelectedComicAndSearchFiltersByMetadata() = runTest(testDispatcher) {
+        val comic1 = createTestComic("c1", "Issue 1", "issue_01.cbz").copy(
+            metadata = ComicMetadata(
+                title = "Awakening",
+                series = "Monstress",
+                writer = "Marjorie Liu",
+                publisher = "Image Comics"
+            )
+        )
+        val comic2 = createTestComic("c2", "Issue 2", "issue_02.cbz").copy(
+            metadata = ComicMetadata(
+                title = "Tin Stars",
+                series = "Descender",
+                writer = "Jeff Lemire",
+                publisher = "Image Comics"
+            )
+        )
+        val comic3 = createTestComic("c3", "Issue 3", "issue_03.cbz")
+
+        comicsFlow.value = listOf(comic1, comic2, comic3)
+        foldersFlow.value = listOf(createTestFolder("content://tree/f1", "Comics", true))
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            // 1. Verify ShowComicDetails and DismissComicDetails
+            assertNull(viewModel.uiState.value.selectedComicForDetails)
+
+            viewModel.onEvent(LibraryUiEvent.ShowComicDetails(comic1))
+            testScheduler.advanceUntilIdle()
+            assertEquals(comic1, viewModel.uiState.value.selectedComicForDetails)
+
+            viewModel.onEvent(LibraryUiEvent.DismissComicDetails)
+            testScheduler.advanceUntilIdle()
+            assertNull(viewModel.uiState.value.selectedComicForDetails)
+
+            // 2. Search by metadata series
+            viewModel.onEvent(LibraryUiEvent.SearchQueryChanged("Monstress"))
+            testScheduler.advanceUntilIdle()
+
+            val seriesSearchState = viewModel.uiState.value
+            assertEquals(1, seriesSearchState.comics.size)
+            assertEquals("c1", seriesSearchState.comics.first().comicKey)
+
+            // 3. Search by metadata writer
+            viewModel.onEvent(LibraryUiEvent.SearchQueryChanged("Lemire"))
+            testScheduler.advanceUntilIdle()
+
+            val writerSearchState = viewModel.uiState.value
+            assertEquals(1, writerSearchState.comics.size)
+            assertEquals("c2", writerSearchState.comics.first().comicKey)
 
             cancelAndIgnoreRemainingEvents()
         }

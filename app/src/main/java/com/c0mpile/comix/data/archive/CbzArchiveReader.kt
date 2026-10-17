@@ -4,6 +4,7 @@ import com.c0mpile.comix.data.source.RandomAccessSource
 import com.c0mpile.comix.data.source.readFullyAt
 import com.c0mpile.comix.di.IoDispatcher
 import com.c0mpile.comix.domain.model.ComicFormat
+import com.c0mpile.comix.domain.model.ComicMetadata
 import com.c0mpile.comix.domain.model.ComicPage
 import java.io.IOException
 import java.util.zip.DataFormatException
@@ -22,7 +23,8 @@ class CbzArchiveReader private constructor(
     private val fileName: String?,
     private val pages: List<ComicPage>,
     private val entryMetadata: List<ZipEntryInternal>,
-    private val ioDispatcher: CoroutineDispatcher
+    private val ioDispatcher: CoroutineDispatcher,
+    private val comicInfoEntry: ZipEntryInternal? = null
 ) : ComicArchiveReader {
 
     override fun getPages(): List<ComicPage> = pages
@@ -31,12 +33,27 @@ class CbzArchiveReader private constructor(
         if (pageIndex !in pages.indices) {
             throw IndexOutOfBoundsException("Page index $pageIndex out of bounds [0, ${pages.size})")
         }
+        readEntryBytes(entryMetadata[pageIndex], MAX_UNCOMPRESSED_ENTRY_BYTES)
+    }
 
-        val meta = entryMetadata[pageIndex]
+    override suspend fun extractMetadata(): ComicMetadata? = withContext(ioDispatcher) {
+        val entry = comicInfoEntry ?: return@withContext null
+        if (entry.uncompressedSize <= 0L || entry.uncompressedSize > MAX_METADATA_ENTRY_BYTES) {
+            return@withContext null
+        }
+        runCatching {
+            ComicInfoXmlParser.parse(readEntryBytes(entry, MAX_METADATA_ENTRY_BYTES))
+        }.getOrNull()
+    }
+
+    private suspend fun readEntryBytes(
+        meta: ZipEntryInternal,
+        maxUncompressedBytes: Long = MAX_UNCOMPRESSED_ENTRY_BYTES
+    ): ByteArray = withContext(ioDispatcher) {
         if (meta.compressedSize < 0L || meta.uncompressedSize < 0L) {
             throw CorruptArchiveException(fileName, "Invalid entry sizes: compressed=${meta.compressedSize}, uncompressed=${meta.uncompressedSize}")
         }
-        if (meta.uncompressedSize > MAX_UNCOMPRESSED_ENTRY_BYTES) {
+        if (meta.uncompressedSize > maxUncompressedBytes) {
             throw CorruptArchiveException(fileName, "Uncompressed size ${meta.uncompressedSize} exceeds safety limit")
         }
         if (meta.localHeaderOffset < 0L || meta.localHeaderOffset + 30L > source.size()) {
@@ -132,6 +149,7 @@ class CbzArchiveReader private constructor(
         private const val COMPRESSION_DEFLATED = 8
 
         private const val MAX_UNCOMPRESSED_ENTRY_BYTES = 256L * 1024L * 1024L
+        private const val MAX_METADATA_ENTRY_BYTES = 4L * 1024L * 1024L
         private const val MAX_CENTRAL_DIR_BYTES = 64L * 1024L * 1024L
 
         private val SUPPORTED_IMAGE_EXTENSIONS = setOf(
@@ -217,6 +235,7 @@ class CbzArchiveReader private constructor(
             val cdBuffer = ByteArray(cdSize.toInt())
             source.readFullyAt(cdOffset, cdBuffer)
 
+            var comicInfoEntry: ZipEntryInternal? = null
             val parsedEntries = mutableListOf<ZipEntryInternal>()
             var pos = 0
             while (pos + 46 <= cdBuffer.size) {
@@ -286,6 +305,14 @@ class CbzArchiveReader private constructor(
                             localHeaderOffset = localHeaderOffset
                         )
                     )
+                } else if (comicInfoEntry == null && isComicInfoEntry(entryName)) {
+                    comicInfoEntry = ZipEntryInternal(
+                        entryName = entryName,
+                        compressionMethod = method,
+                        compressedSize = compressedSize,
+                        uncompressedSize = uncompressedSize,
+                        localHeaderOffset = localHeaderOffset
+                    )
                 }
             }
 
@@ -311,8 +338,24 @@ class CbzArchiveReader private constructor(
                 fileName = fileName,
                 pages = comicPages,
                 entryMetadata = parsedEntries,
-                ioDispatcher = ioDispatcher
+                ioDispatcher = ioDispatcher,
+                comicInfoEntry = comicInfoEntry
             )
+        }
+
+        private fun isComicInfoEntry(entryName: String): Boolean {
+            if (entryName.endsWith('/') || entryName.endsWith('\\')) {
+                return false
+            }
+            if (entryName.startsWith("__MACOSX/") || entryName.contains("/__MACOSX/")) {
+                return false
+            }
+            val segments = entryName.split('/', '\\')
+            if (segments.any { it.startsWith('.') }) {
+                return false
+            }
+            val simpleName = entryName.substringAfterLast('/').substringAfterLast('\\')
+            return simpleName.equals("ComicInfo.xml", ignoreCase = true)
         }
 
         private fun isValidImageEntry(entryName: String): Boolean {

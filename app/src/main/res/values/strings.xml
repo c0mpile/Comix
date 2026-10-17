@@ -170,4 +170,19 @@
     <!-- Library Layout Mode Toggle -->
     <string name="action_switch_to_list_view">Switch to list view</string>
     <string name="action_switch_to_grid_view">Switch to grid view</string>
+
+    <!-- Comic Metadata & Details Dialog -->
+    <string name="cd_comic_info">Comic info for %1$s</string>
+    <string name="comic_details_title">Comic Details</string>
+    <string name="comic_details_series">Series</string>
+    <string name="comic_details_writer">Writer</string>
+    <string name="comic_details_penciller">Penciller</string>
+    <string name="comic_details_publisher">Publisher</string>
+    <string name="comic_details_release_date">Release Date</string>
+    <string name="comic_details_genre">Genre</string>
+    <string name="comic_details_summary">Summary</string>
+    <string name="comic_details_file_name">File</string>
+    <string name="comic_details_format_pages">%1$s • %2$d pages</string>
+    <string name="comic_details_no_embedded_metadata">No embedded metadata found in this comic.</string>
+    <string name="action_read_comic">Read</string>
 </resources>
