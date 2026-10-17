@@ -2,6 +2,7 @@ package com.c0mpile.comix.ui.library
 
 import app.cash.turbine.test
 import com.c0mpile.comix.data.remote.drive.DriveApiException
+import com.c0mpile.comix.domain.model.BulkComicMetadataUpdate
 import com.c0mpile.comix.domain.model.Comic
 import com.c0mpile.comix.domain.model.ComicAvailability
 import com.c0mpile.comix.domain.model.ComicError
@@ -18,8 +19,10 @@ import com.c0mpile.comix.domain.model.LibrarySortOrder
 import com.c0mpile.comix.domain.model.ReadingDirection
 import com.c0mpile.comix.domain.model.ReadingProgress
 import com.c0mpile.comix.domain.model.ScanResult
+import com.c0mpile.comix.domain.model.SingleComicMetadataUpdate
 import com.c0mpile.comix.domain.model.UserSettings
 import com.c0mpile.comix.domain.usecase.AddLibraryFolderUseCase
+import com.c0mpile.comix.domain.usecase.BulkUpdateComicMetadataUseCase
 import com.c0mpile.comix.domain.usecase.CreateLibraryUseCase
 import com.c0mpile.comix.domain.usecase.DeleteLibraryUseCase
 import com.c0mpile.comix.domain.usecase.ObserveDriveFoldersUseCase
@@ -31,6 +34,7 @@ import com.c0mpile.comix.domain.usecase.RemoveLibraryFolderUseCase
 import com.c0mpile.comix.domain.usecase.RescanDriveUseCase
 import com.c0mpile.comix.domain.usecase.RescanLibraryUseCase
 import com.c0mpile.comix.domain.usecase.UpdateActiveLibraryUseCase
+import com.c0mpile.comix.domain.usecase.UpdateComicMetadataUseCase
 import com.c0mpile.comix.domain.usecase.UpdateLibraryLayoutModeUseCase
 import com.c0mpile.comix.domain.usecase.UpdateLibrarySortOrderUseCase
 import com.c0mpile.comix.domain.usecase.UpdateLibraryUseCase
@@ -75,6 +79,8 @@ class LibraryViewModelTest {
     private val deleteLibraryUseCase = mockk<DeleteLibraryUseCase>()
     private val updateActiveLibraryUseCase = mockk<UpdateActiveLibraryUseCase>()
     private val updateLibraryLayoutModeUseCase = mockk<UpdateLibraryLayoutModeUseCase>()
+    private val updateComicMetadataUseCase = mockk<UpdateComicMetadataUseCase>()
+    private val bulkUpdateComicMetadataUseCase = mockk<BulkUpdateComicMetadataUseCase>()
 
     private val comicsFlow = MutableStateFlow<List<Comic>>(emptyList())
     private val foldersFlow = MutableStateFlow<List<LibraryFolder>>(emptyList())
@@ -120,6 +126,8 @@ class LibraryViewModelTest {
         coEvery { updateLibraryUseCase(any(), any(), any()) } returns Result.success(Unit)
         coEvery { deleteLibraryUseCase(any()) } returns Result.success(Unit)
         coEvery { updateLibraryLayoutModeUseCase(any()) } returns Unit
+        coEvery { updateComicMetadataUseCase(any()) } returns Result.success(Unit)
+        coEvery { bulkUpdateComicMetadataUseCase(any()) } returns Result.success(Unit)
 
         viewModel = LibraryViewModel(
             observeLibraryComicsUseCase = observeLibraryComicsUseCase,
@@ -136,7 +144,9 @@ class LibraryViewModelTest {
             updateLibraryUseCase = updateLibraryUseCase,
             deleteLibraryUseCase = deleteLibraryUseCase,
             updateActiveLibraryUseCase = updateActiveLibraryUseCase,
-            updateLibraryLayoutModeUseCase = updateLibraryLayoutModeUseCase
+            updateLibraryLayoutModeUseCase = updateLibraryLayoutModeUseCase,
+            updateComicMetadataUseCase = updateComicMetadataUseCase,
+            bulkUpdateComicMetadataUseCase = bulkUpdateComicMetadataUseCase
         )
     }
 
@@ -954,6 +964,332 @@ class LibraryViewModelTest {
             viewModel.onEvent(LibraryUiEvent.LibrarySelected("manga"))
             testScheduler.advanceUntilIdle()
             assertNull(viewModel.uiState.value.selectedSeriesKey)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun enterSelectionModeSelectsComicAndEnablesSelectionMode() = runTest(testDispatcher) {
+        val comic1 = createTestComic("c1", "Comic 1")
+        comicsFlow.value = listOf(comic1)
+        foldersFlow.value = listOf(createTestFolder("content://tree/f1", "Comics", true))
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            val initial = viewModel.uiState.value
+            assertFalse(initial.isSelectionMode)
+            assertTrue(initial.selectedComicKeys.isEmpty())
+
+            viewModel.onEvent(LibraryUiEvent.EnterSelectionMode("c1"))
+            testScheduler.advanceUntilIdle()
+
+            val selectedState = viewModel.uiState.value
+            assertTrue(selectedState.isSelectionMode)
+            assertEquals(setOf("c1"), selectedState.selectedComicKeys)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun toggleComicSelectedAddsAndRemovesComicFromSelection() = runTest(testDispatcher) {
+        val comic1 = createTestComic("c1", "Comic 1")
+        val comic2 = createTestComic("c2", "Comic 2")
+        comicsFlow.value = listOf(comic1, comic2)
+        foldersFlow.value = listOf(createTestFolder("content://tree/f1", "Comics", true))
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            viewModel.onEvent(LibraryUiEvent.ToggleComicSelected("c1"))
+            testScheduler.advanceUntilIdle()
+            assertEquals(setOf("c1"), viewModel.uiState.value.selectedComicKeys)
+
+            viewModel.onEvent(LibraryUiEvent.ToggleComicSelected("c2"))
+            testScheduler.advanceUntilIdle()
+            assertEquals(setOf("c1", "c2"), viewModel.uiState.value.selectedComicKeys)
+
+            viewModel.onEvent(LibraryUiEvent.ToggleComicSelected("c1"))
+            testScheduler.advanceUntilIdle()
+            assertEquals(setOf("c2"), viewModel.uiState.value.selectedComicKeys)
+
+            viewModel.onEvent(LibraryUiEvent.ToggleComicSelected("c2"))
+            testScheduler.advanceUntilIdle()
+            assertTrue(viewModel.uiState.value.selectedComicKeys.isEmpty())
+            assertFalse(viewModel.uiState.value.isSelectionMode)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun selectAllComicsSelectsAllVisibleComicsAndRestrictsToDrilledSeries() = runTest(testDispatcher) {
+        val spiderman1 = createTestComic("sm1", "Spider-Man #1")
+        val spiderman2 = createTestComic("sm2", "Spider-Man #2")
+        val batman1 = createTestComic("bm1", "Batman #1")
+
+        comicsFlow.value = listOf(spiderman1, spiderman2, batman1)
+        foldersFlow.value = listOf(createTestFolder("content://tree/f1", "Comics", true))
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            // In browse mode: select all visible comics
+            viewModel.onEvent(LibraryUiEvent.SelectAllComics)
+            testScheduler.advanceUntilIdle()
+            assertEquals(setOf("sm1", "sm2", "bm1"), viewModel.uiState.value.selectedComicKeys)
+
+            // Clear selection
+            viewModel.onEvent(LibraryUiEvent.ClearSelection)
+            testScheduler.advanceUntilIdle()
+            assertTrue(viewModel.uiState.value.selectedComicKeys.isEmpty())
+
+            // Drill into Spider-Man series
+            viewModel.onEvent(LibraryUiEvent.FilterTabSelected(LibraryFilterTab.SERIES))
+            viewModel.onEvent(LibraryUiEvent.SeriesSelected("spider-man"))
+            testScheduler.advanceUntilIdle()
+
+            // In drilled series: select all selects only that series' comics
+            viewModel.onEvent(LibraryUiEvent.SelectAllComics)
+            testScheduler.advanceUntilIdle()
+            assertEquals(setOf("sm1", "sm2"), viewModel.uiState.value.selectedComicKeys)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun clearSelectionEmptiesSelectedComics() = runTest(testDispatcher) {
+        val comic1 = createTestComic("c1", "Comic 1")
+        comicsFlow.value = listOf(comic1)
+        foldersFlow.value = listOf(createTestFolder("content://tree/f1", "Comics", true))
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            viewModel.onEvent(LibraryUiEvent.EnterSelectionMode("c1"))
+            testScheduler.advanceUntilIdle()
+            assertTrue(viewModel.uiState.value.isSelectionMode)
+
+            viewModel.onEvent(LibraryUiEvent.ClearSelection)
+            testScheduler.advanceUntilIdle()
+            assertFalse(viewModel.uiState.value.isSelectionMode)
+            assertTrue(viewModel.uiState.value.selectedComicKeys.isEmpty())
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun switchingTabOrLibraryClearsSelection() = runTest(testDispatcher) {
+        val comic1 = createTestComic("c1", "Comic 1")
+        comicsFlow.value = listOf(comic1)
+        foldersFlow.value = listOf(createTestFolder("content://tree/f1", "Comics", true))
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            // 1. Selection cleared on filter tab change
+            viewModel.onEvent(LibraryUiEvent.EnterSelectionMode("c1"))
+            testScheduler.advanceUntilIdle()
+            assertEquals(setOf("c1"), viewModel.uiState.value.selectedComicKeys)
+
+            viewModel.onEvent(LibraryUiEvent.FilterTabSelected(LibraryFilterTab.IN_PROGRESS))
+            testScheduler.advanceUntilIdle()
+            assertTrue(viewModel.uiState.value.selectedComicKeys.isEmpty())
+
+            // 2. Selection cleared on library change
+            viewModel.onEvent(LibraryUiEvent.EnterSelectionMode("c1"))
+            testScheduler.advanceUntilIdle()
+            assertEquals(setOf("c1"), viewModel.uiState.value.selectedComicKeys)
+
+            viewModel.onEvent(LibraryUiEvent.LibrarySelected("manga"))
+            testScheduler.advanceUntilIdle()
+            assertTrue(viewModel.uiState.value.selectedComicKeys.isEmpty())
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun openMetadataEditorForSelectionWithOneVsMultipleSelectedSetsEditingComics() = runTest(testDispatcher) {
+        val comic1 = createTestComic("c1", "Comic 1")
+        val comic2 = createTestComic("c2", "Comic 2")
+        comicsFlow.value = listOf(comic1, comic2)
+        foldersFlow.value = listOf(createTestFolder("content://tree/f1", "Comics", true))
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            // 1. One selected
+            viewModel.onEvent(LibraryUiEvent.EnterSelectionMode("c1"))
+            viewModel.onEvent(LibraryUiEvent.OpenMetadataEditorForSelection)
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(1, viewModel.uiState.value.editingMetadataComics?.size)
+            assertEquals("c1", viewModel.uiState.value.editingMetadataComics?.first()?.comicKey)
+
+            // Dismiss editor
+            viewModel.onEvent(LibraryUiEvent.DismissMetadataEditor)
+            testScheduler.advanceUntilIdle()
+            assertNull(viewModel.uiState.value.editingMetadataComics)
+
+            // 2. Two selected
+            viewModel.onEvent(LibraryUiEvent.ToggleComicSelected("c2"))
+            viewModel.onEvent(LibraryUiEvent.OpenMetadataEditorForSelection)
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(2, viewModel.uiState.value.editingMetadataComics?.size)
+
+            // 3. Direct comic edit
+            viewModel.onEvent(LibraryUiEvent.OpenMetadataEditorForComic(comic1))
+            testScheduler.advanceUntilIdle()
+            assertEquals(1, viewModel.uiState.value.editingMetadataComics?.size)
+            assertEquals("c1", viewModel.uiState.value.editingMetadataComics?.first()?.comicKey)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun saveSingleMetadataInvokesUseCaseAndClearsSelectionAndClosesEditor() = runTest(testDispatcher) {
+        val comic1 = createTestComic("c1", "Comic 1")
+        comicsFlow.value = listOf(comic1)
+        foldersFlow.value = listOf(createTestFolder("content://tree/f1", "Comics", true))
+
+        val update = SingleComicMetadataUpdate(
+            comicKey = "c1",
+            series = "Saga",
+            title = "Saga #1",
+            number = "1",
+            releaseYear = 2012,
+            writer = "Brian K. Vaughan",
+            penciller = "Fiona Staples",
+            publisher = "Image Comics",
+            summary = "A sci-fi epic."
+        )
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            viewModel.onEvent(LibraryUiEvent.ShowComicDetails(comic1))
+            viewModel.onEvent(LibraryUiEvent.EnterSelectionMode("c1"))
+            viewModel.onEvent(LibraryUiEvent.OpenMetadataEditorForComic(comic1))
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(comic1, viewModel.uiState.value.selectedComicForDetails)
+            assertEquals(setOf("c1"), viewModel.uiState.value.selectedComicKeys)
+            assertEquals(1, viewModel.uiState.value.editingMetadataComics?.size)
+
+            viewModel.onEvent(LibraryUiEvent.SaveSingleMetadata(update))
+            testScheduler.advanceUntilIdle()
+
+            coVerify(exactly = 1) { updateComicMetadataUseCase(update) }
+            assertTrue(viewModel.uiState.value.selectedComicKeys.isEmpty())
+            assertNull(viewModel.uiState.value.editingMetadataComics)
+            assertNull(viewModel.uiState.value.selectedComicForDetails)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun saveBulkMetadataInvokesUseCaseAndClearsSelectionAndClosesEditor() = runTest(testDispatcher) {
+        val comic1 = createTestComic("c1", "Comic 1")
+        val comic2 = createTestComic("c2", "Comic 2")
+        comicsFlow.value = listOf(comic1, comic2)
+        foldersFlow.value = listOf(createTestFolder("content://tree/f1", "Comics", true))
+
+        val bulkUpdate = BulkComicMetadataUpdate(
+            comicKeys = listOf("c1", "c2"),
+            series = "Saga",
+            updateSeries = true,
+            writer = "Brian K. Vaughan",
+            updateWriter = true
+        )
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            viewModel.onEvent(LibraryUiEvent.ToggleComicSelected("c1"))
+            viewModel.onEvent(LibraryUiEvent.ToggleComicSelected("c2"))
+            viewModel.onEvent(LibraryUiEvent.OpenMetadataEditorForSelection)
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(setOf("c1", "c2"), viewModel.uiState.value.selectedComicKeys)
+            assertEquals(2, viewModel.uiState.value.editingMetadataComics?.size)
+
+            viewModel.onEvent(LibraryUiEvent.SaveBulkMetadata(bulkUpdate))
+            testScheduler.advanceUntilIdle()
+
+            coVerify(exactly = 1) { bulkUpdateComicMetadataUseCase(bulkUpdate) }
+            assertTrue(viewModel.uiState.value.selectedComicKeys.isEmpty())
+            assertNull(viewModel.uiState.value.editingMetadataComics)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun failingMetadataSaveSetsActiveError() = runTest(testDispatcher) {
+        val comic1 = createTestComic("c1", "Comic 1")
+        comicsFlow.value = listOf(comic1)
+        foldersFlow.value = listOf(createTestFolder("content://tree/f1", "Comics", true))
+
+        val update = SingleComicMetadataUpdate(
+            comicKey = "c1",
+            series = null,
+            title = null,
+            number = null,
+            releaseYear = null,
+            writer = null,
+            penciller = null,
+            publisher = null,
+            summary = null
+        )
+
+        val bulkUpdate = BulkComicMetadataUpdate(
+            comicKeys = listOf("c1"),
+            series = null,
+            updateSeries = false
+        )
+
+        coEvery { updateComicMetadataUseCase(any()) } returns Result.failure(IOException("Disk error"))
+        coEvery { bulkUpdateComicMetadataUseCase(any()) } returns Result.failure(IOException("Write error"))
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            // 1. Single save failure
+            viewModel.onEvent(LibraryUiEvent.SaveSingleMetadata(update))
+            testScheduler.advanceUntilIdle()
+
+            val stateAfterSingleError = viewModel.uiState.value
+            assertTrue(stateAfterSingleError.activeError is ComicError.UnknownIoError)
+            assertEquals("Disk error", (stateAfterSingleError.activeError as ComicError.UnknownIoError).message)
+
+            viewModel.onEvent(LibraryUiEvent.DismissError)
+            testScheduler.advanceUntilIdle()
+            assertNull(viewModel.uiState.value.activeError)
+
+            // 2. Bulk save failure
+            viewModel.onEvent(LibraryUiEvent.SaveBulkMetadata(bulkUpdate))
+            testScheduler.advanceUntilIdle()
+
+            val stateAfterBulkError = viewModel.uiState.value
+            assertTrue(stateAfterBulkError.activeError is ComicError.UnknownIoError)
+            assertEquals("Write error", (stateAfterBulkError.activeError as ComicError.UnknownIoError).message)
 
             cancelAndIgnoreRemainingEvents()
         }

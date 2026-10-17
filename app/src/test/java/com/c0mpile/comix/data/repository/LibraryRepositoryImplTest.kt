@@ -18,12 +18,14 @@ import com.c0mpile.comix.data.source.ComicKeyHasher
 import com.c0mpile.comix.data.source.ComicSource
 import com.c0mpile.comix.data.source.DiscoveredComicFile
 import com.c0mpile.comix.data.source.RandomAccessSource
+import com.c0mpile.comix.domain.model.BulkComicMetadataUpdate
 import com.c0mpile.comix.domain.model.ComicAvailability
 import com.c0mpile.comix.domain.model.ComicError
 import com.c0mpile.comix.domain.model.ComicFormat
 import com.c0mpile.comix.domain.model.ComicPage
 import com.c0mpile.comix.domain.model.ComicSourceType
 import com.c0mpile.comix.domain.model.ReadingDirection
+import com.c0mpile.comix.domain.model.SingleComicMetadataUpdate
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -611,5 +613,209 @@ class LibraryRepositoryImplTest {
         coVerify { libraryFolderDao.deleteFoldersByLibrary("manga") }
         coVerify { driveFolderDao.deleteFoldersByLibrary("manga") }
         coVerify { libraryDao.deleteLibrary("manga") }
+    }
+
+    @Test
+    fun updateComicMetadataTrimsValuesConvertsBlankToNullAndUpdatesTitleWhenNonBlank() = runTest(testDispatcher) {
+        val existing = ComicEntity(
+            comicKey = "c1",
+            title = "Original Title",
+            fileName = "orig.cbz",
+            format = ComicFormat.CBZ,
+            sourceType = ComicSourceType.LOCAL_SAF,
+            availability = ComicAvailability.LOCAL,
+            sizeBytes = 1000L,
+            lastModifiedEpochMillis = 5000L,
+            pageCount = 20,
+            localUri = "content://comix/orig.cbz",
+            folderUri = "content://comix/folder",
+            localSampleSha256 = null,
+            driveFileId = null,
+            driveMd5 = null,
+            coverCachePath = null,
+            metaSeries = "Old Series",
+            metaTitle = "Old Meta Title",
+            metaNumber = "1",
+            metaReleaseYear = 2020,
+            metaWriter = "Old Writer",
+            metaPenciller = "Old Penciller",
+            metaPublisher = "Old Publisher",
+            metaSummary = "Old Summary"
+        )
+        coEvery { comicDao.getComicByKey("c1") } returns existing
+        val captured = slot<ComicEntity>()
+        coEvery { comicDao.upsertComic(capture(captured)) } returns Unit
+
+        val update = SingleComicMetadataUpdate(
+            comicKey = "c1",
+            series = "  New Series  ",
+            title = "  New Title  ",
+            number = "  2  ",
+            releaseYear = 2024,
+            writer = "   ",
+            penciller = "  New Penciller  ",
+            publisher = null,
+            summary = "  New Summary  "
+        )
+
+        val result = repository.updateComicMetadata(update)
+        assertTrue(result.isSuccess)
+        val saved = captured.captured
+        assertEquals("New Title", saved.title)
+        assertEquals("New Title", saved.metaTitle)
+        assertEquals("New Series", saved.metaSeries)
+        assertEquals("2", saved.metaNumber)
+        assertEquals(2024, saved.metaReleaseYear)
+        assertNull(saved.metaWriter)
+        assertEquals("New Penciller", saved.metaPenciller)
+        assertNull(saved.metaPublisher)
+        assertEquals("New Summary", saved.metaSummary)
+    }
+
+    @Test
+    fun updateComicMetadataKeepsOriginalTitleWhenUpdateTitleIsBlankOrNull() = runTest(testDispatcher) {
+        val existing = ComicEntity(
+            comicKey = "c1",
+            title = "Keep Me",
+            fileName = "keep.cbz",
+            format = ComicFormat.CBZ,
+            sourceType = ComicSourceType.LOCAL_SAF,
+            availability = ComicAvailability.LOCAL,
+            sizeBytes = 1000L,
+            lastModifiedEpochMillis = 5000L,
+            pageCount = 20,
+            localUri = "content://comix/keep.cbz",
+            folderUri = "content://comix/folder",
+            localSampleSha256 = null,
+            driveFileId = null,
+            driveMd5 = null,
+            coverCachePath = null
+        )
+        coEvery { comicDao.getComicByKey("c1") } returns existing
+        val captured = slot<ComicEntity>()
+        coEvery { comicDao.upsertComic(capture(captured)) } returns Unit
+
+        val update = SingleComicMetadataUpdate(
+            comicKey = "c1",
+            series = "Series",
+            title = "   ",
+            number = null,
+            releaseYear = null,
+            writer = null,
+            penciller = null,
+            publisher = null,
+            summary = null
+        )
+
+        val result = repository.updateComicMetadata(update)
+        assertTrue(result.isSuccess)
+        assertEquals("Keep Me", captured.captured.title)
+        assertNull(captured.captured.metaTitle)
+    }
+
+    @Test
+    fun updateComicMetadataReturnsFailureWhenComicNotFound() = runTest(testDispatcher) {
+        coEvery { comicDao.getComicByKey("missing") } returns null
+
+        val update = SingleComicMetadataUpdate(
+            comicKey = "missing",
+            series = null,
+            title = null,
+            number = null,
+            releaseYear = null,
+            writer = null,
+            penciller = null,
+            publisher = null,
+            summary = null
+        )
+
+        val result = repository.updateComicMetadata(update)
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is NoSuchElementException)
+    }
+
+    @Test
+    fun bulkUpdateComicMetadataAppliesOnlyFieldsWithUpdateFlagTrueAcrossComics() = runTest(testDispatcher) {
+        val comic1 = ComicEntity(
+            comicKey = "c1",
+            title = "Issue 1",
+            fileName = "c1.cbz",
+            format = ComicFormat.CBZ,
+            sourceType = ComicSourceType.LOCAL_SAF,
+            availability = ComicAvailability.LOCAL,
+            sizeBytes = 1000L,
+            lastModifiedEpochMillis = 5000L,
+            pageCount = 20,
+            localUri = "content://comix/c1.cbz",
+            folderUri = "content://comix/folder",
+            localSampleSha256 = null,
+            driveFileId = null,
+            driveMd5 = null,
+            coverCachePath = null,
+            metaSeries = "Old Series 1",
+            metaReleaseYear = 2010,
+            metaWriter = "Original Writer 1",
+            metaPenciller = "Artist 1",
+            metaPublisher = "Publisher 1"
+        )
+        val comic2 = ComicEntity(
+            comicKey = "c2",
+            title = "Issue 2",
+            fileName = "c2.cbz",
+            format = ComicFormat.CBZ,
+            sourceType = ComicSourceType.LOCAL_SAF,
+            availability = ComicAvailability.LOCAL,
+            sizeBytes = 1000L,
+            lastModifiedEpochMillis = 5000L,
+            pageCount = 20,
+            localUri = "content://comix/c2.cbz",
+            folderUri = "content://comix/folder",
+            localSampleSha256 = null,
+            driveFileId = null,
+            driveMd5 = null,
+            coverCachePath = null,
+            metaSeries = "Old Series 2",
+            metaReleaseYear = 2011,
+            metaWriter = "Original Writer 2",
+            metaPenciller = "Artist 2",
+            metaPublisher = "Publisher 2"
+        )
+
+        coEvery { comicDao.getComicsByKeys(listOf("c1", "c2")) } returns listOf(comic1, comic2)
+        val captured = slot<List<ComicEntity>>()
+        coEvery { comicDao.upsertComics(capture(captured)) } returns Unit
+
+        val bulkUpdate = BulkComicMetadataUpdate(
+            comicKeys = listOf("c1", "c2"),
+            series = "Ignored Series",
+            updateSeries = false,
+            releaseYear = 2099,
+            updateReleaseYear = false,
+            writer = "  Shared Writer  ",
+            updateWriter = true,
+            penciller = "Ignored Penciller",
+            updatePenciller = false,
+            publisher = "  Shared Publisher  ",
+            updatePublisher = true
+        )
+
+        val result = repository.bulkUpdateComicMetadata(bulkUpdate)
+        assertTrue(result.isSuccess)
+        val saved = captured.captured
+        assertEquals(2, saved.size)
+
+        val saved1 = saved.first { it.comicKey == "c1" }
+        assertEquals("Old Series 1", saved1.metaSeries)
+        assertEquals(2010, saved1.metaReleaseYear)
+        assertEquals("Shared Writer", saved1.metaWriter)
+        assertEquals("Artist 1", saved1.metaPenciller)
+        assertEquals("Shared Publisher", saved1.metaPublisher)
+
+        val saved2 = saved.first { it.comicKey == "c2" }
+        assertEquals("Old Series 2", saved2.metaSeries)
+        assertEquals(2011, saved2.metaReleaseYear)
+        assertEquals("Shared Writer", saved2.metaWriter)
+        assertEquals("Artist 2", saved2.metaPenciller)
+        assertEquals("Shared Publisher", saved2.metaPublisher)
     }
 }

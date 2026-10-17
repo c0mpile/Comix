@@ -423,7 +423,8 @@ class LibraryViewModel @Inject constructor(
             }
 
             is LibraryUiEvent.OpenMetadataEditorForSelection -> {
-                val selectedComics = uiState.value.comics.filter { it.comicKey in uiState.value.selectedComicKeys }
+                val selectedKeys = selectedComicKeysState.value
+                val selectedComics = uiState.value.comics.filter { it.comicKey in selectedKeys }
                 if (selectedComics.isNotEmpty()) {
                     editingMetadataComicsState.value = selectedComics
                 }
