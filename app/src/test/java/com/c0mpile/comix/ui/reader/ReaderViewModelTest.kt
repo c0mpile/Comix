@@ -8,6 +8,7 @@ import com.c0mpile.comix.domain.model.Comic
 import com.c0mpile.comix.domain.model.ComicAvailability
 import com.c0mpile.comix.domain.model.ComicError
 import com.c0mpile.comix.domain.model.ComicFormat
+import com.c0mpile.comix.domain.model.ComicLibrary
 import com.c0mpile.comix.domain.model.ComicPage
 import com.c0mpile.comix.domain.model.ComicSourceType
 import com.c0mpile.comix.domain.model.ReaderScaleMode
@@ -16,6 +17,7 @@ import com.c0mpile.comix.domain.model.ReadingProgress
 import com.c0mpile.comix.domain.model.UserSettings
 import com.c0mpile.comix.domain.repository.ReaderRepository
 import com.c0mpile.comix.domain.usecase.GetComicUseCase
+import com.c0mpile.comix.domain.usecase.GetLibraryUseCase
 import com.c0mpile.comix.domain.usecase.ObserveUserSettingsUseCase
 import com.c0mpile.comix.domain.usecase.SaveReadingProgressUseCase
 import com.c0mpile.comix.domain.usecase.UpdateReaderScaleModeUseCase
@@ -51,6 +53,7 @@ class ReaderViewModelTest {
     private val observeUserSettingsUseCase = mockk<ObserveUserSettingsUseCase>()
     private val updateReaderScaleModeUseCase = mockk<UpdateReaderScaleModeUseCase>()
     private val updateReadingDirectionUseCase = mockk<UpdateReadingDirectionUseCase>()
+    private val getLibraryUseCase = mockk<GetLibraryUseCase>(relaxed = true)
 
     private val userSettingsFlow = MutableStateFlow(UserSettings())
     private val testDispatcher = StandardTestDispatcher()
@@ -61,6 +64,7 @@ class ReaderViewModelTest {
         every { observeUserSettingsUseCase() } returns userSettingsFlow
         coEvery { updateReaderScaleModeUseCase(any()) } returns Unit
         coEvery { updateReadingDirectionUseCase(any()) } returns Unit
+        coEvery { getLibraryUseCase(any()) } returns null
     }
 
     @After
@@ -77,7 +81,8 @@ class ReaderViewModelTest {
             readerRepository = readerRepository,
             observeUserSettingsUseCase = observeUserSettingsUseCase,
             updateReaderScaleModeUseCase = updateReaderScaleModeUseCase,
-            updateReadingDirectionUseCase = updateReadingDirectionUseCase
+            updateReadingDirectionUseCase = updateReadingDirectionUseCase,
+            getLibraryUseCase = getLibraryUseCase
         )
     }
 
@@ -368,10 +373,59 @@ class ReaderViewModelTest {
         coVerify(exactly = 1) { updateReadingDirectionUseCase(ReadingDirection.LEFT_TO_RIGHT) }
     }
 
+    @Test
+    fun openingMangaLibraryComicDefaultsToRightToLeftDirection() = runTest(testDispatcher) {
+        val mangaComic = createTestComic("manga1", "Naruto Vol 1", libraryId = "manga")
+        coEvery { getComicUseCase("manga1") } returns mangaComic
+        val mangaLibrary = ComicLibrary(
+            libraryId = "manga",
+            name = "Manga",
+            defaultReadingDirection = ReadingDirection.RIGHT_TO_LEFT,
+            createdAtEpochMillis = 1000L,
+            isBuiltIn = true
+        )
+        coEvery { getLibraryUseCase("manga") } returns mangaLibrary
+        val mockReader = mockk<ComicArchiveReader>(relaxed = true)
+        coEvery { readerRepository.openComicReader(mangaComic) } returns Result.success(mockReader)
+        coEvery { readerRepository.getReadingProgress("manga1") } returns null
+        coEvery { saveReadingProgressUseCase(any(), any(), any()) } returns Unit
+
+        userSettingsFlow.value = UserSettings(readingDirection = ReadingDirection.LEFT_TO_RIGHT)
+        val viewModel = createViewModel("manga1")
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(ReadingDirection.RIGHT_TO_LEFT, viewModel.uiState.value.readingDirection)
+    }
+
+    @Test
+    fun openingComicsLibraryComicDefaultsToLeftToRightDirection() = runTest(testDispatcher) {
+        val comic = createTestComic("comic1", "Batman", libraryId = "comics")
+        coEvery { getComicUseCase("comic1") } returns comic
+        val comicsLibrary = ComicLibrary(
+            libraryId = "comics",
+            name = "Comics",
+            defaultReadingDirection = ReadingDirection.LEFT_TO_RIGHT,
+            createdAtEpochMillis = 1000L,
+            isBuiltIn = true
+        )
+        coEvery { getLibraryUseCase("comics") } returns comicsLibrary
+        val mockReader = mockk<ComicArchiveReader>(relaxed = true)
+        coEvery { readerRepository.openComicReader(comic) } returns Result.success(mockReader)
+        coEvery { readerRepository.getReadingProgress("comic1") } returns null
+        coEvery { saveReadingProgressUseCase(any(), any(), any()) } returns Unit
+
+        userSettingsFlow.value = UserSettings(readingDirection = ReadingDirection.RIGHT_TO_LEFT)
+        val viewModel = createViewModel("comic1")
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(ReadingDirection.LEFT_TO_RIGHT, viewModel.uiState.value.readingDirection)
+    }
+
     private fun createTestComic(
         comicKey: String,
         title: String,
-        pageCount: Int = 10
+        pageCount: Int = 10,
+        libraryId: String = ComicLibrary.DEFAULT_COMICS_ID
     ) = Comic(
         comicKey = comicKey,
         title = title,
@@ -383,6 +437,7 @@ class ReaderViewModelTest {
         lastModifiedEpochMillis = 1000L,
         pageCount = pageCount,
         localUri = "content://tree/$title.cbz",
-        folderUri = "content://tree/folder1"
+        folderUri = "content://tree/folder1",
+        libraryId = libraryId
     )
 }

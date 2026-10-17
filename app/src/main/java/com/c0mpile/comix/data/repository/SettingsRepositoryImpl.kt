@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.c0mpile.comix.domain.model.AppThemeMode
+import com.c0mpile.comix.domain.model.ComicLibrary
 import com.c0mpile.comix.domain.model.LibrarySortOrder
 import com.c0mpile.comix.domain.model.ReaderScaleMode
 import com.c0mpile.comix.domain.model.ReadingDirection
@@ -72,6 +73,12 @@ class SettingsRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun setActiveLibraryId(libraryId: String) {
+        dataStore.edit { preferences ->
+            preferences[KEY_ACTIVE_LIBRARY_ID] = libraryId
+        }
+    }
+
     private fun mapToUserSettings(preferences: Preferences): UserSettings {
         val themeMode = preferences[KEY_THEME_MODE]?.let { raw ->
             AppThemeMode.entries.find { it.name == raw }
@@ -91,12 +98,16 @@ class SettingsRepositoryImpl @Inject constructor(
             LibrarySortOrder.entries.find { it.name == raw }
         } ?: LibrarySortOrder.TITLE_ASC
 
+        val activeLibraryId = preferences[KEY_ACTIVE_LIBRARY_ID]?.takeIf { it.isNotBlank() }
+            ?: ComicLibrary.DEFAULT_COMICS_ID
+
         return UserSettings(
             themeMode = themeMode,
             readingDirection = readingDirection,
             readerScaleMode = readerScaleMode,
             keepScreenOn = keepScreenOn,
-            librarySortOrder = librarySortOrder
+            librarySortOrder = librarySortOrder,
+            activeLibraryId = activeLibraryId
         )
     }
 
@@ -106,5 +117,6 @@ class SettingsRepositoryImpl @Inject constructor(
         val KEY_READER_SCALE_MODE = stringPreferencesKey("reader_scale_mode")
         val KEY_KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
         val KEY_LIBRARY_SORT_ORDER = stringPreferencesKey("library_sort_order")
+        val KEY_ACTIVE_LIBRARY_ID = stringPreferencesKey("active_library_id")
     }
 }

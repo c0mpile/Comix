@@ -4,9 +4,12 @@ import com.c0mpile.comix.data.archive.ComicArchiveReaderFactory
 import com.c0mpile.comix.data.archive.CorruptArchiveException
 import com.c0mpile.comix.data.archive.EmptyArchiveException
 import com.c0mpile.comix.data.local.dao.ComicDao
+import com.c0mpile.comix.data.local.dao.DriveFolderDao
+import com.c0mpile.comix.data.local.dao.LibraryDao
 import com.c0mpile.comix.data.local.dao.LibraryFolderDao
 import com.c0mpile.comix.data.local.entity.ComicEntity
 import com.c0mpile.comix.data.local.entity.ComicWithProgressProjection
+import com.c0mpile.comix.data.local.entity.LibraryEntity
 import com.c0mpile.comix.data.local.entity.LibraryFolderEntity
 import com.c0mpile.comix.data.local.entity.ReadingProgressEntity
 import com.c0mpile.comix.data.source.ComicKeyHasher
@@ -16,13 +19,16 @@ import com.c0mpile.comix.di.IoDispatcher
 import com.c0mpile.comix.domain.model.Comic
 import com.c0mpile.comix.domain.model.ComicAvailability
 import com.c0mpile.comix.domain.model.ComicError
+import com.c0mpile.comix.domain.model.ComicLibrary
 import com.c0mpile.comix.domain.model.ComicSourceType
 import com.c0mpile.comix.domain.model.LibraryFolder
+import com.c0mpile.comix.domain.model.ReadingDirection
 import com.c0mpile.comix.domain.model.ReadingProgress
 import com.c0mpile.comix.domain.model.ScanResult
 import com.c0mpile.comix.domain.repository.LibraryRepository
 import java.io.FileNotFoundException
 import java.io.IOException
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
@@ -32,8 +38,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 /**
- * Repository coordinating library folders, comic file discovery, archive inspection,
- * and Room database persistence off the main thread.
+ * Repository coordinating multiple libraries, library folders, comic file discovery,
+ * archive inspection, and Room database persistence off the main thread.
  */
 @Singleton
 class LibraryRepositoryImpl @Inject constructor(
@@ -42,11 +48,97 @@ class LibraryRepositoryImpl @Inject constructor(
     private val comicSource: ComicSource,
     private val comicKeyHasher: ComicKeyHasher,
     private val archiveReaderFactory: ComicArchiveReaderFactory,
-    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    private val libraryDao: LibraryDao,
+    private val driveFolderDao: DriveFolderDao
 ) : LibraryRepository {
+
+    override fun observeLibraries(): Flow<List<ComicLibrary>> =
+        libraryDao.observeLibraries()
+            .map { entities ->
+                if (entities.isEmpty()) {
+                    ensureDefaultLibrariesSeeded()
+                    libraryDao.getLibraries().map { it.toDomain() }
+                } else {
+                    entities.map { it.toDomain() }
+                }
+            }
+            .flowOn(ioDispatcher)
+
+    override suspend fun getLibrary(libraryId: String): ComicLibrary? =
+        withContext(ioDispatcher) {
+            ensureDefaultLibrariesSeeded()
+            libraryDao.getLibrary(libraryId)?.toDomain()
+        }
+
+    override suspend fun createLibrary(
+        name: String,
+        defaultReadingDirection: ReadingDirection
+    ): Result<ComicLibrary> = withContext(ioDispatcher) {
+        val trimmedName = name.trim()
+        if (trimmedName.isBlank()) {
+            return@withContext Result.failure(IllegalArgumentException("Library name cannot be blank"))
+        }
+
+        val slug = trimmedName.lowercase()
+            .replace(Regex("[^a-z0-9]+"), "_")
+            .trim('_')
+            .take(20)
+        val uniqueSuffix = UUID.randomUUID().toString().replace("-", "").take(8)
+        val libraryId = if (slug.isNotBlank()) "${slug}_$uniqueSuffix" else uniqueSuffix
+
+        val entity = LibraryEntity(
+            libraryId = libraryId,
+            name = trimmedName,
+            defaultReadingDirection = defaultReadingDirection,
+            createdAtEpochMillis = System.currentTimeMillis(),
+            isBuiltIn = false
+        )
+        libraryDao.upsertLibrary(entity)
+        Result.success(entity.toDomain())
+    }
+
+    override suspend fun updateLibrary(
+        libraryId: String,
+        name: String,
+        defaultReadingDirection: ReadingDirection
+    ): Result<Unit> = withContext(ioDispatcher) {
+        val trimmedName = name.trim()
+        if (trimmedName.isBlank()) {
+            return@withContext Result.failure(IllegalArgumentException("Library name cannot be blank"))
+        }
+
+        val existing = libraryDao.getLibrary(libraryId)
+            ?: return@withContext Result.failure(IllegalArgumentException("Library not found: $libraryId"))
+
+        val updated = existing.copy(
+            name = trimmedName,
+            defaultReadingDirection = defaultReadingDirection
+        )
+        libraryDao.upsertLibrary(updated)
+        Result.success(Unit)
+    }
+
+    override suspend fun deleteLibrary(libraryId: String): Result<Unit> = withContext(ioDispatcher) {
+        val allLibraries = libraryDao.getLibraries()
+        if (allLibraries.size <= 1) {
+            return@withContext Result.failure(IllegalStateException("Cannot delete the last remaining library"))
+        }
+
+        comicDao.deleteComicsByLibrary(libraryId)
+        libraryFolderDao.deleteFoldersByLibrary(libraryId)
+        driveFolderDao.deleteFoldersByLibrary(libraryId)
+        libraryDao.deleteLibrary(libraryId)
+        Result.success(Unit)
+    }
 
     override fun observeComics(): Flow<List<Comic>> =
         comicDao.observeAllComicsWithProgress()
+            .map { list -> list.map { it.toDomain() } }
+            .flowOn(ioDispatcher)
+
+    override fun observeComicsByLibrary(libraryId: String): Flow<List<Comic>> =
+        comicDao.observeComicsWithProgressByLibrary(libraryId)
             .map { list -> list.map { it.toDomain() } }
             .flowOn(ioDispatcher)
 
@@ -59,13 +151,33 @@ class LibraryRepositoryImpl @Inject constructor(
                         displayName = entity.displayName,
                         addedAtEpochMillis = entity.addedAtEpochMillis,
                         lastScannedAtEpochMillis = entity.lastScannedAtEpochMillis,
-                        hasPersistedPermission = comicSource.hasPermission(entity.folderUri)
+                        hasPersistedPermission = comicSource.hasPermission(entity.folderUri),
+                        libraryId = entity.libraryId
+                    )
+                }
+            }
+            .flowOn(ioDispatcher)
+
+    override fun observeFoldersByLibrary(libraryId: String): Flow<List<LibraryFolder>> =
+        libraryFolderDao.observeFoldersByLibrary(libraryId)
+            .map { entities ->
+                entities.map { entity ->
+                    LibraryFolder(
+                        folderUri = entity.folderUri,
+                        displayName = entity.displayName,
+                        addedAtEpochMillis = entity.addedAtEpochMillis,
+                        lastScannedAtEpochMillis = entity.lastScannedAtEpochMillis,
+                        hasPersistedPermission = comicSource.hasPermission(entity.folderUri),
+                        libraryId = entity.libraryId
                     )
                 }
             }
             .flowOn(ioDispatcher)
 
     override suspend fun addFolderAndScan(treeUri: String): Result<ScanResult> =
+        addFolderAndScan(treeUri, ComicLibrary.DEFAULT_COMICS_ID)
+
+    override suspend fun addFolderAndScan(treeUri: String, libraryId: String): Result<ScanResult> =
         withContext(ioDispatcher) {
             val hasPermission = comicSource.hasPermission(treeUri)
             if (!hasPermission) {
@@ -88,11 +200,12 @@ class LibraryRepositoryImpl @Inject constructor(
                 folderUri = treeUri,
                 displayName = displayName,
                 addedAtEpochMillis = existing?.addedAtEpochMillis ?: now,
-                lastScannedAtEpochMillis = existing?.lastScannedAtEpochMillis
+                lastScannedAtEpochMillis = existing?.lastScannedAtEpochMillis,
+                libraryId = libraryId
             )
             libraryFolderDao.upsertFolder(folderEntity)
 
-            val scanResult = scanSingleFolder(treeUri)
+            val scanResult = scanSingleFolder(treeUri, libraryId)
             Result.success(scanResult)
         }
 
@@ -105,7 +218,33 @@ class LibraryRepositoryImpl @Inject constructor(
             val allErrors = mutableListOf<ComicError>()
 
             for (folder in folders) {
-                val singleResult = scanSingleFolder(folder.folderUri)
+                val singleResult = scanSingleFolder(folder.folderUri, folder.libraryId)
+                totalAddedOrUpdated += singleResult.addedOrUpdatedCount
+                totalRemoved += singleResult.removedCount
+                totalSkippedCorrupt += singleResult.skippedCorruptCount
+                allErrors.addAll(singleResult.errors)
+            }
+
+            Result.success(
+                ScanResult(
+                    addedOrUpdatedCount = totalAddedOrUpdated,
+                    removedCount = totalRemoved,
+                    skippedCorruptCount = totalSkippedCorrupt,
+                    errors = allErrors
+                )
+            )
+        }
+
+    override suspend fun rescanLibraryFolders(libraryId: String): Result<ScanResult> =
+        withContext(ioDispatcher) {
+            val folders = libraryFolderDao.getFoldersByLibrary(libraryId)
+            var totalAddedOrUpdated = 0
+            var totalRemoved = 0
+            var totalSkippedCorrupt = 0
+            val allErrors = mutableListOf<ComicError>()
+
+            for (folder in folders) {
+                val singleResult = scanSingleFolder(folder.folderUri, folder.libraryId)
                 totalAddedOrUpdated += singleResult.addedOrUpdatedCount
                 totalRemoved += singleResult.removedCount
                 totalSkippedCorrupt += singleResult.skippedCorruptCount
@@ -128,7 +267,31 @@ class LibraryRepositoryImpl @Inject constructor(
             libraryFolderDao.deleteFolder(folderUri)
         }
 
-    private suspend fun scanSingleFolder(folderUri: String): ScanResult {
+    private suspend fun ensureDefaultLibrariesSeeded() {
+        if (libraryDao.getLibraries().isEmpty()) {
+            val now = System.currentTimeMillis()
+            libraryDao.upsertLibraries(
+                listOf(
+                    LibraryEntity(
+                        libraryId = ComicLibrary.DEFAULT_COMICS_ID,
+                        name = "Comics",
+                        defaultReadingDirection = ReadingDirection.LEFT_TO_RIGHT,
+                        createdAtEpochMillis = now,
+                        isBuiltIn = true
+                    ),
+                    LibraryEntity(
+                        libraryId = ComicLibrary.DEFAULT_MANGA_ID,
+                        name = "Manga",
+                        defaultReadingDirection = ReadingDirection.RIGHT_TO_LEFT,
+                        createdAtEpochMillis = now + 1,
+                        isBuiltIn = true
+                    )
+                )
+            )
+        }
+    }
+
+    private suspend fun scanSingleFolder(folderUri: String, libraryId: String): ScanResult {
         if (!comicSource.hasPermission(folderUri)) {
             return ScanResult(
                 addedOrUpdatedCount = 0,
@@ -245,7 +408,8 @@ class LibraryRepositoryImpl @Inject constructor(
                 localSampleSha256 = sampleHash,
                 driveFileId = existingByHash?.driveFileId,
                 driveMd5 = existingByHash?.driveMd5,
-                coverCachePath = coverCachePath
+                coverCachePath = coverCachePath,
+                libraryId = libraryId
             )
 
             comicDao.upsertComic(entity)
@@ -286,7 +450,8 @@ class LibraryRepositoryImpl @Inject constructor(
         driveFileId = comic.driveFileId,
         driveMd5 = comic.driveMd5,
         coverCachePath = comic.coverCachePath,
-        progress = progress?.toDomain()
+        progress = progress?.toDomain(),
+        libraryId = comic.libraryId
     )
 
     private fun ReadingProgressEntity.toDomain(): ReadingProgress = ReadingProgress(
@@ -295,5 +460,13 @@ class LibraryRepositoryImpl @Inject constructor(
         pageCount = pageCount,
         isFinished = isFinished,
         updatedAtEpochMillis = updatedAtEpochMillis
+    )
+
+    private fun LibraryEntity.toDomain(): ComicLibrary = ComicLibrary(
+        libraryId = libraryId,
+        name = name,
+        defaultReadingDirection = defaultReadingDirection,
+        createdAtEpochMillis = createdAtEpochMillis,
+        isBuiltIn = isBuiltIn
     )
 }

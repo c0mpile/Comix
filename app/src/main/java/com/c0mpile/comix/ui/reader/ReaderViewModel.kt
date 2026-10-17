@@ -11,6 +11,7 @@ import com.c0mpile.comix.domain.model.ReaderScaleMode
 import com.c0mpile.comix.domain.model.ReadingDirection
 import com.c0mpile.comix.domain.repository.ReaderRepository
 import com.c0mpile.comix.domain.usecase.GetComicUseCase
+import com.c0mpile.comix.domain.usecase.GetLibraryUseCase
 import com.c0mpile.comix.domain.usecase.ObserveUserSettingsUseCase
 import com.c0mpile.comix.domain.usecase.SaveReadingProgressUseCase
 import com.c0mpile.comix.domain.usecase.UpdateReaderScaleModeUseCase
@@ -38,7 +39,8 @@ class ReaderViewModel @Inject constructor(
     private val readerRepository: ReaderRepository,
     private val observeUserSettingsUseCase: ObserveUserSettingsUseCase,
     private val updateReaderScaleModeUseCase: UpdateReaderScaleModeUseCase,
-    private val updateReadingDirectionUseCase: UpdateReadingDirectionUseCase
+    private val updateReadingDirectionUseCase: UpdateReadingDirectionUseCase,
+    private val getLibraryUseCase: GetLibraryUseCase
 ) : ViewModel() {
 
     val comicKey: String = try {
@@ -55,14 +57,20 @@ class ReaderViewModel @Inject constructor(
     private val pageCache = ReaderPageCache()
     private var currentReader: ComicArchiveReader? = null
     private val decodeJobs = mutableMapOf<Int, Job>()
+    private var hasLibraryDirectionApplied = false
+    private var hasUserOverriddenDirection = false
 
     init {
         loadArchive()
         viewModelScope.launch {
             observeUserSettingsUseCase().collect { settings ->
-                _uiState.update {
-                    it.copy(
-                        readingDirection = settings.readingDirection,
+                _uiState.update { current ->
+                    current.copy(
+                        readingDirection = if (!hasLibraryDirectionApplied && !hasUserOverriddenDirection) {
+                            settings.readingDirection
+                        } else {
+                            current.readingDirection
+                        },
                         scaleMode = settings.readerScaleMode,
                         keepScreenOn = settings.keepScreenOn
                     )
@@ -122,11 +130,13 @@ class ReaderViewModel @Inject constructor(
             }
 
             is ReaderUiEvent.ToggleReadingDirection -> {
+                hasUserOverriddenDirection = true
                 val nextDirection = if (_uiState.value.readingDirection == ReadingDirection.LEFT_TO_RIGHT) {
                     ReadingDirection.RIGHT_TO_LEFT
                 } else {
                     ReadingDirection.LEFT_TO_RIGHT
                 }
+                _uiState.update { it.copy(readingDirection = nextDirection) }
                 viewModelScope.launch {
                     updateReadingDirectionUseCase(nextDirection)
                 }
@@ -160,6 +170,12 @@ class ReaderViewModel @Inject constructor(
                     )
                 }
                 return@launch
+            }
+
+            val library = getLibraryUseCase(comic.libraryId)
+            if (library != null && !hasUserOverriddenDirection) {
+                hasLibraryDirectionApplied = true
+                _uiState.update { it.copy(readingDirection = library.defaultReadingDirection) }
             }
 
             val result = readerRepository.openComicReader(comic)

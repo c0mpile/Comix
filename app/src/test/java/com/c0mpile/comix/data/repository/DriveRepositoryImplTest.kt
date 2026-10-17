@@ -27,8 +27,11 @@ import com.c0mpile.comix.domain.model.DriveBrowseItem
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.coVerifyOrder
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -55,6 +58,7 @@ class DriveRepositoryImplTest {
 
     @Before
     fun setUp() {
+        coEvery { driveFolderDao.getFolder(any()) } returns null
         repository = DriveRepositoryImpl(
             authorizer = authorizer,
             apiClient = apiClient,
@@ -492,5 +496,51 @@ class DriveRepositoryImplTest {
         assertEquals(0, scan.addedOrUpdatedCount)
         assertEquals(0, scan.removedCount)
         coVerify(exactly = 0) { apiClient.listChanges(any()) }
+    }
+
+    @Test
+    fun addDriveFolderWithCustomLibraryIdPersistsFolderWithLibraryId() = runTest(testDispatcher) {
+        coEvery { driveFolderDao.upsertFolder(any()) } returns Unit
+        coEvery { driveAccountDao.getAccount() } returns DriveAccountEntity(
+            email = "user@example.com",
+            signedInAtEpochMillis = 1000L,
+            changesPageToken = "token"
+        )
+        coEvery { driveSource.scanDriveFiles("folder-manga") } returns emptyList()
+        coEvery { comicDao.getComicsByDriveFolder("folder-manga") } returns emptyList()
+        coEvery { driveFolderDao.updateLastScanned("folder-manga", any()) } returns Unit
+
+        val result = repository.addDriveFolder("folder-manga", "Manga Collection", null, "manga")
+        assertTrue(result.isSuccess)
+        coVerify {
+            driveFolderDao.upsertFolder(
+                match { it.folderId == "folder-manga" && it.displayName == "Manga Collection" && it.libraryId == "manga" }
+            )
+        }
+    }
+
+    @Test
+    fun observeDriveFoldersByLibraryEmitsOnlyFoldersForSpecifiedLibrary() = runTest(testDispatcher) {
+        val folderEntity = DriveFolderEntity("f_manga", "Manga", 1000L, null, null, "manga")
+        every { driveFolderDao.observeFoldersByLibrary("manga") } returns flowOf(listOf(folderEntity))
+
+        val emitted = repository.observeDriveFoldersByLibrary("manga").first()
+        assertEquals(1, emitted.size)
+        assertEquals("f_manga", emitted[0].folderId)
+        assertEquals("manga", emitted[0].libraryId)
+    }
+
+    @Test
+    fun rescanDriveFoldersForLibraryScansOnlyFoldersInThatLibrary() = runTest(testDispatcher) {
+        val folderEntity = DriveFolderEntity("f_manga", "Manga", 1000L, null, null, "manga")
+        coEvery { driveFolderDao.getFoldersByLibrary("manga") } returns listOf(folderEntity)
+        coEvery { driveFolderDao.getFolder("f_manga") } returns folderEntity
+        coEvery { driveSource.scanDriveFiles("f_manga") } returns emptyList()
+        coEvery { comicDao.getComicsByDriveFolder("f_manga") } returns emptyList()
+        coEvery { driveFolderDao.updateLastScanned("f_manga", any()) } returns Unit
+
+        val result = repository.rescanDriveFoldersForLibrary("manga")
+        assertTrue(result.isSuccess)
+        coVerify(exactly = 1) { driveSource.scanDriveFiles("f_manga") }
     }
 }

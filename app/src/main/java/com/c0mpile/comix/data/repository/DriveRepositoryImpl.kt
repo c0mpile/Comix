@@ -15,7 +15,9 @@ import com.c0mpile.comix.data.remote.drive.MIME_TYPE_SHORTCUT
 import com.c0mpile.comix.data.source.DriveSource
 import com.c0mpile.comix.di.IoDispatcher
 import com.c0mpile.comix.domain.model.ComicAvailability
+import com.c0mpile.comix.domain.model.ComicError
 import com.c0mpile.comix.domain.model.ComicFormat
+import com.c0mpile.comix.domain.model.ComicLibrary
 import com.c0mpile.comix.domain.model.ComicSourceType
 import com.c0mpile.comix.domain.model.DriveAccount
 import com.c0mpile.comix.domain.model.DriveAuthState
@@ -27,6 +29,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
@@ -90,10 +93,25 @@ class DriveRepositoryImpl @Inject constructor(
                     displayName = entity.displayName,
                     addedAtEpochMillis = entity.addedAtEpochMillis,
                     lastScannedAtEpochMillis = entity.lastScannedAtEpochMillis,
-                    driveId = entity.driveId
+                    driveId = entity.driveId,
+                    libraryId = entity.libraryId
                 )
             }
-        }
+        }.flowOn(ioDispatcher)
+
+    override fun observeDriveFoldersByLibrary(libraryId: String): Flow<List<DriveFolder>> =
+        driveFolderDao.observeFoldersByLibrary(libraryId).map { entities ->
+            entities.map { entity ->
+                DriveFolder(
+                    folderId = entity.folderId,
+                    displayName = entity.displayName,
+                    addedAtEpochMillis = entity.addedAtEpochMillis,
+                    lastScannedAtEpochMillis = entity.lastScannedAtEpochMillis,
+                    driveId = entity.driveId,
+                    libraryId = entity.libraryId
+                )
+            }
+        }.flowOn(ioDispatcher)
 
     override suspend fun browseSubfolders(parentFolderId: String): Result<List<DriveBrowseItem>> =
         withContext(ioDispatcher) {
@@ -147,6 +165,13 @@ class DriveRepositoryImpl @Inject constructor(
         folderId: String,
         displayName: String,
         driveId: String?
+    ): Result<ScanResult> = addDriveFolder(folderId, displayName, driveId, ComicLibrary.DEFAULT_COMICS_ID)
+
+    override suspend fun addDriveFolder(
+        folderId: String,
+        displayName: String,
+        driveId: String?,
+        libraryId: String
     ): Result<ScanResult> = withContext(ioDispatcher) {
         try {
             val now = System.currentTimeMillis()
@@ -155,7 +180,8 @@ class DriveRepositoryImpl @Inject constructor(
                     folderId = folderId,
                     displayName = displayName,
                     addedAtEpochMillis = now,
-                    driveId = driveId
+                    driveId = driveId,
+                    libraryId = libraryId
                 )
             )
 
@@ -182,6 +208,8 @@ class DriveRepositoryImpl @Inject constructor(
 
     override suspend fun rescanFolder(folderId: String): Result<ScanResult> = withContext(ioDispatcher) {
         try {
+            val folderEntity = driveFolderDao.getFolder(folderId)
+            val folderLibraryId = folderEntity?.libraryId ?: ComicLibrary.DEFAULT_COMICS_ID
             val driveFiles = driveSource.scanDriveFiles(folderId)
             val existing = comicDao.getComicsByDriveFolder(folderId)
             val existingByKey = existing.associateBy { it.comicKey }
@@ -214,7 +242,8 @@ class DriveRepositoryImpl @Inject constructor(
                     localSampleSha256 = existingComic?.localSampleSha256,
                     driveFileId = file.id,
                     driveMd5 = md5,
-                    coverCachePath = existingComic?.coverCachePath
+                    coverCachePath = existingComic?.coverCachePath,
+                    libraryId = folderLibraryId
                 )
 
                 if (existingComic == null) {
@@ -249,6 +278,36 @@ class DriveRepositoryImpl @Inject constructor(
             Result.failure(e)
         }
     }
+
+    override suspend fun rescanDriveFoldersForLibrary(libraryId: String): Result<ScanResult> =
+        withContext(ioDispatcher) {
+            val folders = driveFolderDao.getFoldersByLibrary(libraryId)
+            var totalAddedOrUpdated = 0
+            var totalRemoved = 0
+            var totalSkippedCorrupt = 0
+            val allErrors = mutableListOf<ComicError>()
+
+            for (folder in folders) {
+                val singleResult = rescanFolder(folder.folderId)
+                singleResult.onSuccess { result ->
+                    totalAddedOrUpdated += result.addedOrUpdatedCount
+                    totalRemoved += result.removedCount
+                    totalSkippedCorrupt += result.skippedCorruptCount
+                    allErrors.addAll(result.errors)
+                }.onFailure { e ->
+                    allErrors.add(ComicError.UnknownIoError(e.message))
+                }
+            }
+
+            Result.success(
+                ScanResult(
+                    addedOrUpdatedCount = totalAddedOrUpdated,
+                    removedCount = totalRemoved,
+                    skippedCorruptCount = totalSkippedCorrupt,
+                    errors = allErrors
+                )
+            )
+        }
 
     override suspend fun incrementalSync(): Result<ScanResult> = withContext(ioDispatcher) {
         try {

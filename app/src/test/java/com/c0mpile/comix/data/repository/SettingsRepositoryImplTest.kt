@@ -204,4 +204,21 @@ class SettingsRepositoryImplTest {
             assertEquals("Fatal preference corruption", error.message)
         }
     }
+
+    @Test
+    fun setActiveLibraryIdPersistsAndEmitsUpdatedActiveLibraryId() = runTest {
+        val (repository, _) = createTestRepository()
+
+        repository.observeUserSettings().test {
+            assertEquals("comics", awaitItem().activeLibraryId)
+
+            repository.setActiveLibraryId("manga")
+            assertEquals("manga", awaitItem().activeLibraryId)
+
+            repository.setActiveLibraryId("custom_lib_123")
+            assertEquals("custom_lib_123", awaitItem().activeLibraryId)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 }
