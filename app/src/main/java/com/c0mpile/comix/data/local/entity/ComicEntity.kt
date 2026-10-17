@@ -71,5 +71,41 @@ data class ComicEntity(
     val coverCachePath: String? = null,
 
     @ColumnInfo(name = "library_id", defaultValue = "'comics'")
-    val libraryId: String = ComicLibrary.DEFAULT_COMICS_ID
+    val libraryId: String = ComicLibrary.DEFAULT_COMICS_ID,
+
+    @ColumnInfo(name = "meta_title")
+    val metaTitle: String? = null,
+
+    @ColumnInfo(name = "meta_series")
+    val metaSeries: String? = null,
+
+    @ColumnInfo(name = "meta_number")
+    val metaNumber: String? = null,
+
+    @ColumnInfo(name = "meta_volume")
+    val metaVolume: Int? = null,
+
+    @ColumnInfo(name = "meta_summary")
+    val metaSummary: String? = null,
+
+    @ColumnInfo(name = "meta_writer")
+    val metaWriter: String? = null,
+
+    @ColumnInfo(name = "meta_penciller")
+    val metaPenciller: String? = null,
+
+    @ColumnInfo(name = "meta_publisher")
+    val metaPublisher: String? = null,
+
+    @ColumnInfo(name = "meta_genre")
+    val metaGenre: String? = null,
+
+    @ColumnInfo(name = "meta_release_year")
+    val metaReleaseYear: Int? = null,
+
+    @ColumnInfo(name = "meta_release_month")
+    val metaReleaseMonth: Int? = null,
+
+    @ColumnInfo(name = "meta_release_day")
+    val metaReleaseDay: Int? = null
 )

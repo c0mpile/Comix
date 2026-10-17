@@ -28,7 +28,7 @@ import com.c0mpile.comix.data.local.entity.ReadingProgressEntity
         DriveFolderEntity::class,
         LibraryEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 @TypeConverters(ComicConverters::class)
