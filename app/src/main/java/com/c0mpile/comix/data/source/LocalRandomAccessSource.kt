@@ -3,6 +3,7 @@ package com.c0mpile.comix.data.source
 import android.content.Context
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import com.c0mpile.comix.data.remote.drive.DriveApiClient
 import com.c0mpile.comix.di.IoDispatcher
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -100,12 +101,47 @@ class LocalRandomAccessSource(
 }
 
 /**
- * Factory that opens [LocalRandomAccessSource] instances for local SAF content URIs.
+ * Factory that opens [LocalRandomAccessSource] instances for local SAF content URIs
+ * and streaming [DriveStreamingRandomAccessSource] instances for Google Drive files.
  */
 class LocalRandomAccessSourceFactory @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    private val driveApiClient: DriveApiClient
 ) : RandomAccessSourceFactory {
+
+    constructor(
+        context: Context,
+        ioDispatcher: CoroutineDispatcher
+    ) : this(
+        context = context,
+        ioDispatcher = ioDispatcher,
+        driveApiClient = object : DriveApiClient {
+            override suspend fun listChildren(parentId: String, pageToken: String?) = throw UnsupportedOperationException()
+            override suspend fun listSubfolders(parentId: String, pageToken: String?) = throw UnsupportedOperationException()
+            override suspend fun getFile(fileId: String) = throw UnsupportedOperationException()
+            override suspend fun getStartPageToken() = throw UnsupportedOperationException()
+            override suspend fun listChanges(pageToken: String) = throw UnsupportedOperationException()
+        }
+    )
+
+    override suspend fun openDrive(
+        fileId: String,
+        sizeBytes: Long
+    ): RandomAccessSource = withContext(ioDispatcher) {
+        val resolvedSize = if (sizeBytes > 0L) {
+            sizeBytes
+        } else {
+            driveApiClient.getFile(fileId).size ?: 0L
+        }
+        val cacheDir = File(context.cacheDir, "drive_chunks")
+        DriveStreamingRandomAccessSource(
+            fileId = fileId,
+            sourceSize = resolvedSize,
+            apiClient = driveApiClient,
+            cacheRootDir = cacheDir
+        )
+    }
 
     override suspend fun openLocal(uri: String): RandomAccessSource = withContext(ioDispatcher) {
         val parsedUri = Uri.parse(uri)

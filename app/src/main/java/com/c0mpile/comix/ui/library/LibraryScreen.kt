@@ -161,7 +161,6 @@ fun LibraryScreenContent(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val dismissLabel = stringResource(R.string.snackbar_dismiss)
-    val driveReadingUnavailableMessage = stringResource(R.string.snackbar_drive_reading_unavailable)
     var isSortMenuExpanded by remember { mutableStateOf(false) }
     var isCreatingLibrary by remember { mutableStateOf(false) }
     var libraryToEdit by remember { mutableStateOf<ComicLibrary?>(null) }
@@ -268,16 +267,7 @@ fun LibraryScreenContent(
             onDismiss = { onEvent(LibraryUiEvent.DismissComicDetails) },
             onReadComic = {
                 onEvent(LibraryUiEvent.DismissComicDetails)
-                if (comicForDetails.availability == ComicAvailability.REMOTE) {
-                    coroutineScope.launch {
-                        snackbarHostState.showSnackbar(
-                            message = driveReadingUnavailableMessage,
-                            duration = SnackbarDuration.Short
-                        )
-                    }
-                } else {
-                    onOpenComic(comicForDetails.comicKey)
-                }
+                onOpenComic(comicForDetails.comicKey)
             }
         )
     }
@@ -660,16 +650,7 @@ fun LibraryScreenContent(
                                         ComicGridItem(
                                             comic = comic,
                                             onClick = {
-                                                if (comic.availability == ComicAvailability.REMOTE) {
-                                                    coroutineScope.launch {
-                                                        snackbarHostState.showSnackbar(
-                                                            message = driveReadingUnavailableMessage,
-                                                            duration = SnackbarDuration.Short
-                                                        )
-                                                    }
-                                                } else {
-                                                    onOpenComic(comic.comicKey)
-                                                }
+                                                onOpenComic(comic.comicKey)
                                             },
                                             onInfoClick = {
                                                 onEvent(LibraryUiEvent.ShowComicDetails(comic))
@@ -690,16 +671,7 @@ fun LibraryScreenContent(
                                         ComicListItem(
                                             comic = comic,
                                             onClick = {
-                                                if (comic.availability == ComicAvailability.REMOTE) {
-                                                    coroutineScope.launch {
-                                                        snackbarHostState.showSnackbar(
-                                                            message = driveReadingUnavailableMessage,
-                                                            duration = SnackbarDuration.Short
-                                                        )
-                                                    }
-                                                } else {
-                                                    onOpenComic(comic.comicKey)
-                                                }
+                                                onOpenComic(comic.comicKey)
                                             },
                                             onInfoClick = {
                                                 onEvent(LibraryUiEvent.ShowComicDetails(comic))

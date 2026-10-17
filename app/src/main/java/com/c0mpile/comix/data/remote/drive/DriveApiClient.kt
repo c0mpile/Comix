@@ -28,4 +28,24 @@ interface DriveApiClient {
      * Lists file and folder changes starting from [pageToken].
      */
     suspend fun listChanges(pageToken: String): DriveChangeList
+
+    /**
+     * Downloads the inclusive byte range `[startByte, endByteInclusive]` of a Google Drive file.
+     */
+    suspend fun downloadRange(
+        fileId: String,
+        startByte: Long,
+        endByteInclusive: Long
+    ): ByteArray = throw UnsupportedOperationException()
+
+    /**
+     * Reads the JSON reading-progress sync payload stored in Google Drive `appDataFolder`,
+     * or returns `null` if no sync file exists yet.
+     */
+    suspend fun readProgressSyncPayload(): String? = null
+
+    /**
+     * Creates or overwrites the JSON reading-progress sync payload in Google Drive `appDataFolder`.
+     */
+    suspend fun writeProgressSyncPayload(jsonPayload: String) {}
 }

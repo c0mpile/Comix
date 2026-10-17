@@ -17,6 +17,12 @@ interface ReadingProgressDao {
     @Query("SELECT * FROM reading_progress WHERE comic_key = :comicKey LIMIT 1")
     suspend fun getProgress(comicKey: String): ReadingProgressEntity?
 
+    @Query("SELECT * FROM reading_progress")
+    suspend fun getAllProgress(): List<ReadingProgressEntity>
+
     @Upsert
     suspend fun upsertProgress(progress: ReadingProgressEntity)
+
+    @Upsert
+    suspend fun upsertAllProgress(progressList: List<ReadingProgressEntity>)
 }

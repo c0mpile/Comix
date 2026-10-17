@@ -21,6 +21,7 @@ import com.c0mpile.comix.domain.usecase.ObserveUserSettingsUseCase
 import com.c0mpile.comix.domain.usecase.RemoveLibraryFolderUseCase
 import com.c0mpile.comix.domain.usecase.RescanDriveUseCase
 import com.c0mpile.comix.domain.usecase.RescanLibraryUseCase
+import com.c0mpile.comix.domain.usecase.SyncDriveReadingProgressUseCase
 import com.c0mpile.comix.domain.usecase.UpdateActiveLibraryUseCase
 import com.c0mpile.comix.domain.usecase.UpdateLibraryLayoutModeUseCase
 import com.c0mpile.comix.domain.usecase.UpdateLibrarySortOrderUseCase
@@ -58,7 +59,8 @@ class LibraryViewModel @Inject constructor(
     private val updateLibraryUseCase: UpdateLibraryUseCase,
     private val deleteLibraryUseCase: DeleteLibraryUseCase,
     private val updateActiveLibraryUseCase: UpdateActiveLibraryUseCase,
-    private val updateLibraryLayoutModeUseCase: UpdateLibraryLayoutModeUseCase
+    private val updateLibraryLayoutModeUseCase: UpdateLibraryLayoutModeUseCase,
+    private val syncDriveReadingProgressUseCase: SyncDriveReadingProgressUseCase? = null
 ) : ViewModel() {
 
     private data class ScannerState(
@@ -233,6 +235,8 @@ class LibraryViewModel @Inject constructor(
                             }
                         }
                     }
+
+                    runCatching { syncDriveReadingProgressUseCase?.invoke() }
 
                     scannerState.update {
                         it.copy(

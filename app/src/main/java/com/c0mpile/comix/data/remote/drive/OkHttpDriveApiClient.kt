@@ -11,8 +11,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 
 /**
@@ -44,6 +46,7 @@ class OkHttpDriveApiClient(
 
     companion object {
         const val DEFAULT_BASE_URL: String = "https://www.googleapis.com/drive/v3/"
+        const val PROGRESS_SYNC_FILE_NAME: String = "comix_reading_progress.json"
 
         private val defaultJson = Json {
             ignoreUnknownKeys = true
@@ -129,6 +132,116 @@ class OkHttpDriveApiClient(
         }
     }
 
+    override suspend fun downloadRange(
+        fileId: String,
+        startByte: Long,
+        endByteInclusive: Long
+    ): ByteArray = withContext(ioDispatcher) {
+        require(startByte >= 0L && endByteInclusive >= startByte) {
+            "Invalid byte range: startByte=$startByte, endByteInclusive=$endByteInclusive"
+        }
+        val response = executeRequest { targetBaseUrl ->
+            val url = targetBaseUrl.newBuilder()
+                .addPathSegment("files")
+                .addPathSegment(fileId)
+                .addQueryParameter("alt", "media")
+                .addQueryParameter("supportsAllDrives", "true")
+                .build()
+            Request.Builder()
+                .url(url)
+                .header("Range", "bytes=$startByte-$endByteInclusive")
+        }
+        if (!response.isSuccessful) {
+            val code = response.code
+            val message = response.message
+            response.close()
+            throw DriveApiException(ComicError.DriveApiError(code, message))
+        }
+        response.use { it.body.bytes() }
+    }
+
+    override suspend fun readProgressSyncPayload(): String? = withContext(ioDispatcher) {
+        val fileList = executeAndDecode<DriveFileList> { urlBuilder ->
+            urlBuilder.addPathSegment("files")
+                .addQueryParameter("spaces", "appDataFolder")
+                .addQueryParameter("q", "name = '$PROGRESS_SYNC_FILE_NAME' and trashed = false")
+                .addQueryParameter("fields", LIST_FILES_FIELDS)
+                .addQueryParameter("pageSize", "1")
+        }
+        val file = fileList.files.firstOrNull() ?: return@withContext null
+        val response = executeRequest { targetBaseUrl ->
+            val url = targetBaseUrl.newBuilder()
+                .addPathSegment("files")
+                .addPathSegment(file.id)
+                .addQueryParameter("alt", "media")
+                .build()
+            Request.Builder().url(url)
+        }
+        if (!response.isSuccessful) {
+            val code = response.code
+            val message = response.message
+            response.close()
+            throw DriveApiException(ComicError.DriveApiError(code, message))
+        }
+        response.use { it.body.string() }
+    }
+
+    override suspend fun writeProgressSyncPayload(jsonPayload: String): Unit = withContext(ioDispatcher) {
+        val fileList = executeAndDecode<DriveFileList> { urlBuilder ->
+            urlBuilder.addPathSegment("files")
+                .addQueryParameter("spaces", "appDataFolder")
+                .addQueryParameter("q", "name = '$PROGRESS_SYNC_FILE_NAME' and trashed = false")
+                .addQueryParameter("fields", LIST_FILES_FIELDS)
+                .addQueryParameter("pageSize", "1")
+        }
+
+        val targetFileId = fileList.files.firstOrNull()?.id ?: run {
+            val createResponse = executeRequest { targetBaseUrl ->
+                val url = targetBaseUrl.newBuilder()
+                    .addPathSegment("files")
+                    .addQueryParameter("fields", "id")
+                    .build()
+                val body = "{\"name\":\"$PROGRESS_SYNC_FILE_NAME\",\"parents\":[\"appDataFolder\"]}"
+                    .toRequestBody("application/json; charset=utf-8".toMediaType())
+                Request.Builder().url(url).post(body)
+            }
+            if (!createResponse.isSuccessful) {
+                val code = createResponse.code
+                val message = createResponse.message
+                createResponse.close()
+                throw DriveApiException(ComicError.DriveApiError(code, message))
+            }
+            val responseText = createResponse.use { it.body.string() }
+            val created = json.decodeFromString<CreateFileResponse>(responseText)
+            created.id
+        }
+
+        val patchResponse = executeRequest { targetBaseUrl ->
+            val uploadUrl = if (targetBaseUrl.encodedPath.contains("/drive/v3")) {
+                targetBaseUrl.newBuilder()
+                    .encodedPath("/upload/drive/v3/files/$targetFileId")
+                    .addQueryParameter("uploadType", "media")
+                    .build()
+            } else {
+                targetBaseUrl.newBuilder()
+                    .addPathSegment("upload")
+                    .addPathSegment("files")
+                    .addPathSegment(targetFileId)
+                    .addQueryParameter("uploadType", "media")
+                    .build()
+            }
+            val body = jsonPayload.toRequestBody("application/json; charset=utf-8".toMediaType())
+            Request.Builder().url(uploadUrl).patch(body)
+        }
+        if (!patchResponse.isSuccessful) {
+            val code = patchResponse.code
+            val message = patchResponse.message
+            patchResponse.close()
+            throw DriveApiException(ComicError.DriveApiError(code, message))
+        }
+        patchResponse.close()
+    }
+
     private suspend inline fun <reified T> executeAndDecode(
         crossinline buildUrl: (HttpUrl.Builder) -> HttpUrl.Builder
     ): T = withContext(ioDispatcher) {
@@ -195,4 +308,7 @@ class OkHttpDriveApiClient(
 
     @Serializable
     private data class StartPageTokenResponse(val startPageToken: String)
+
+    @Serializable
+    private data class CreateFileResponse(val id: String)
 }

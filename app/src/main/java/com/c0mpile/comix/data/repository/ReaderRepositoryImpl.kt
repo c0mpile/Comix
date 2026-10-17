@@ -10,11 +10,21 @@ import com.c0mpile.comix.data.local.dao.ComicDao
 import com.c0mpile.comix.data.local.dao.ReadingProgressDao
 import com.c0mpile.comix.data.local.entity.ComicWithProgressProjection
 import com.c0mpile.comix.data.local.entity.ReadingProgressEntity
+import com.c0mpile.comix.data.remote.drive.DriveApiException
 import com.c0mpile.comix.data.source.ComicSource
+import com.c0mpile.comix.data.source.RandomAccessSource
+import com.c0mpile.comix.data.source.RandomAccessSourceFactory
 import com.c0mpile.comix.di.IoDispatcher
 import com.c0mpile.comix.domain.model.Comic
 import com.c0mpile.comix.domain.model.ComicError
+import com.c0mpile.comix.domain.model.ComicMetadata
+import com.c0mpile.comix.domain.model.DriveAccount
+import com.c0mpile.comix.domain.model.DriveAuthState
+import com.c0mpile.comix.domain.model.DriveBrowseItem
+import com.c0mpile.comix.domain.model.DriveFolder
 import com.c0mpile.comix.domain.model.ReadingProgress
+import com.c0mpile.comix.domain.model.ScanResult
+import com.c0mpile.comix.domain.repository.DriveRepository
 import com.c0mpile.comix.domain.repository.ReaderRepository
 import java.io.FileNotFoundException
 import java.io.IOException
@@ -40,8 +50,40 @@ class ReaderRepositoryImpl @Inject constructor(
     private val readingProgressDao: ReadingProgressDao,
     private val comicSource: ComicSource,
     private val archiveReaderFactory: ComicArchiveReaderFactory,
+    private val randomAccessSourceFactory: RandomAccessSourceFactory,
+    private val driveRepository: DriveRepository,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) : ReaderRepository {
+
+    constructor(
+        comicDao: ComicDao,
+        readingProgressDao: ReadingProgressDao,
+        comicSource: ComicSource,
+        archiveReaderFactory: ComicArchiveReaderFactory,
+        ioDispatcher: CoroutineDispatcher
+    ) : this(
+        comicDao = comicDao,
+        readingProgressDao = readingProgressDao,
+        comicSource = comicSource,
+        archiveReaderFactory = archiveReaderFactory,
+        randomAccessSourceFactory = object : RandomAccessSourceFactory {
+            override suspend fun openLocal(uri: String): RandomAccessSource = comicSource.openRandomAccessSource(uri)
+        },
+        driveRepository = object : DriveRepository {
+            override fun observeAuthState() = kotlinx.coroutines.flow.emptyFlow<DriveAuthState>()
+            override suspend fun signIn(activity: android.app.Activity) = Result.failure<DriveAccount>(UnsupportedOperationException())
+            override suspend fun completeAuthorizationFromIntent(activity: android.app.Activity, data: android.content.Intent?) = Result.failure<DriveAccount>(UnsupportedOperationException())
+            override suspend fun signOut() {}
+            override fun observeDriveFolders() = kotlinx.coroutines.flow.emptyFlow<List<DriveFolder>>()
+            override fun observeDriveFoldersByLibrary(libraryId: String) = kotlinx.coroutines.flow.emptyFlow<List<DriveFolder>>()
+            override suspend fun browseSubfolders(parentFolderId: String) = Result.success(emptyList<DriveBrowseItem>())
+            override suspend fun addDriveFolder(folderId: String, displayName: String, driveId: String?): Result<ScanResult> = Result.success(ScanResult(0, 0, 0, emptyList()))
+            override suspend fun removeDriveFolder(folderId: String) {}
+            override suspend fun rescanFolder(folderId: String) = Result.success(ScanResult(0, 0, 0, emptyList()))
+            override suspend fun incrementalSync() = Result.success(ScanResult(0, 0, 0, emptyList()))
+        },
+        ioDispatcher = ioDispatcher
+    )
 
     override suspend fun getComic(comicKey: String): Comic? = withContext(ioDispatcher) {
         comicDao.getComicWithProgress(comicKey)?.toDomain()
@@ -50,34 +92,79 @@ class ReaderRepositoryImpl @Inject constructor(
     override suspend fun openComicReader(comic: Comic): Result<ComicArchiveReader> =
         withContext(ioDispatcher) {
             val localUri = comic.localUri
-            if (localUri.isNullOrBlank()) {
+            val driveFileId = comic.driveFileId
+
+            if (localUri.isNullOrBlank() && driveFileId.isNullOrBlank()) {
                 return@withContext Result.failure(
-                    ComicDomainException(ComicError.FileNotFound("No local URI for comic ${comic.comicKey}"))
+                    ComicDomainException(ComicError.FileNotFound("No local URI or Drive file ID for comic ${comic.comicKey}"))
                 )
             }
 
-            if (comic.folderUri != null && !comicSource.hasPermission(comic.folderUri)) {
+            if (!localUri.isNullOrBlank() && comic.folderUri != null && !comicSource.hasPermission(comic.folderUri)) {
                 return@withContext Result.failure(
                     ComicDomainException(ComicError.PermissionRevoked(comic.folderUri))
                 )
             }
 
             try {
-                val source = comicSource.openRandomAccessSource(localUri)
+                val source = if (!localUri.isNullOrBlank()) {
+                    comicSource.openRandomAccessSource(localUri)
+                } else {
+                    randomAccessSourceFactory.openDrive(driveFileId!!, comic.sizeBytes)
+                }
                 val reader = archiveReaderFactory.create(source, comic.format, comic.fileName)
+
+                if (localUri.isNullOrBlank() && !driveFileId.isNullOrBlank()) {
+                    if (comic.pageCount <= 0 || comic.metadata == null) {
+                        try {
+                            val pages = reader.getPages()
+                            val pageCount = pages.size
+                            val metadata = reader.extractMetadata()
+                            val existing = comicDao.getComicWithProgress(comic.comicKey)?.comic
+                            if (existing != null) {
+                                val updated = existing.copy(
+                                    pageCount = if (existing.pageCount <= 0) pageCount else existing.pageCount,
+                                    metaTitle = existing.metaTitle ?: metadata?.title,
+                                    metaSeries = existing.metaSeries ?: metadata?.series,
+                                    metaNumber = existing.metaNumber ?: metadata?.number,
+                                    metaVolume = existing.metaVolume ?: metadata?.volume,
+                                    metaSummary = existing.metaSummary ?: metadata?.summary,
+                                    metaWriter = existing.metaWriter ?: metadata?.writer,
+                                    metaPenciller = existing.metaPenciller ?: metadata?.penciller,
+                                    metaPublisher = existing.metaPublisher ?: metadata?.publisher,
+                                    metaGenre = existing.metaGenre ?: metadata?.genre,
+                                    metaReleaseYear = existing.metaReleaseYear ?: metadata?.releaseYear,
+                                    metaReleaseMonth = existing.metaReleaseMonth ?: metadata?.releaseMonth,
+                                    metaReleaseDay = existing.metaReleaseDay ?: metadata?.releaseDay
+                                )
+                                comicDao.upsertComic(updated)
+                            }
+                        } catch (_: Exception) {
+                            // Non-fatal if metadata persistence fails
+                        }
+                    }
+                }
+
                 Result.success(reader)
             } catch (e: SecurityException) {
-                Result.failure(ComicDomainException(ComicError.PermissionRevoked(localUri), e))
+                Result.failure(ComicDomainException(ComicError.PermissionRevoked(localUri ?: driveFileId ?: ""), e))
             } catch (e: FileNotFoundException) {
-                Result.failure(ComicDomainException(ComicError.FileNotFound(localUri), e))
+                Result.failure(ComicDomainException(ComicError.FileNotFound(localUri ?: driveFileId ?: ""), e))
             } catch (e: EmptyArchiveException) {
                 Result.failure(ComicDomainException(ComicError.EmptyArchive(comic.fileName), e))
             } catch (e: CorruptArchiveException) {
                 Result.failure(ComicDomainException(ComicError.CorruptArchive(comic.fileName, e.reason), e))
             } catch (e: OutOfMemoryError) {
                 Result.failure(ComicDomainException(ComicError.OutOfMemory(null), e))
+            } catch (e: DriveApiException) {
+                Result.failure(ComicDomainException(e.comicError, e))
             } catch (e: Exception) {
-                Result.failure(ComicDomainException(ComicError.UnknownIoError(e.message), e))
+                val driveEx = findDriveApiException(e)
+                if (driveEx != null) {
+                    Result.failure(ComicDomainException(driveEx.comicError, driveEx))
+                } else {
+                    Result.failure(ComicDomainException(ComicError.UnknownIoError(e.message), e))
+                }
             }
         }
 
@@ -187,26 +274,45 @@ class ReaderRepositoryImpl @Inject constructor(
             updatedAtEpochMillis = System.currentTimeMillis()
         )
         readingProgressDao.upsertProgress(entity)
+        runCatching { driveRepository.syncReadingProgress() }
     }
 
-    private fun ComicWithProgressProjection.toDomain(): Comic = Comic(
-        comicKey = comic.comicKey,
-        title = comic.title,
-        fileName = comic.fileName,
-        format = comic.format,
-        sourceType = comic.sourceType,
-        availability = comic.availability,
-        sizeBytes = comic.sizeBytes,
-        lastModifiedEpochMillis = comic.lastModifiedEpochMillis,
-        pageCount = comic.pageCount,
-        localUri = comic.localUri,
-        folderUri = comic.folderUri,
-        driveFileId = comic.driveFileId,
-        driveMd5 = comic.driveMd5,
-        coverCachePath = comic.coverCachePath,
-        progress = progress?.toDomain(),
-        libraryId = comic.libraryId
-    )
+    private fun ComicWithProgressProjection.toDomain(): Comic {
+        val metadata = ComicMetadata(
+            title = comic.metaTitle,
+            series = comic.metaSeries,
+            number = comic.metaNumber,
+            volume = comic.metaVolume,
+            summary = comic.metaSummary,
+            writer = comic.metaWriter,
+            penciller = comic.metaPenciller,
+            publisher = comic.metaPublisher,
+            genre = comic.metaGenre,
+            releaseYear = comic.metaReleaseYear,
+            releaseMonth = comic.metaReleaseMonth,
+            releaseDay = comic.metaReleaseDay
+        ).takeIf { it.hasAnyMetadata }
+
+        return Comic(
+            comicKey = comic.comicKey,
+            title = comic.title,
+            fileName = comic.fileName,
+            format = comic.format,
+            sourceType = comic.sourceType,
+            availability = comic.availability,
+            sizeBytes = comic.sizeBytes,
+            lastModifiedEpochMillis = comic.lastModifiedEpochMillis,
+            pageCount = comic.pageCount,
+            localUri = comic.localUri,
+            folderUri = comic.folderUri,
+            driveFileId = comic.driveFileId,
+            driveMd5 = comic.driveMd5,
+            coverCachePath = comic.coverCachePath,
+            progress = progress?.toDomain(),
+            libraryId = comic.libraryId,
+            metadata = metadata
+        )
+    }
 
     private fun ReadingProgressEntity.toDomain(): ReadingProgress = ReadingProgress(
         comicKey = comicKey,
@@ -215,4 +321,13 @@ class ReaderRepositoryImpl @Inject constructor(
         isFinished = isFinished,
         updatedAtEpochMillis = updatedAtEpochMillis
     )
+
+    private fun findDriveApiException(throwable: Throwable?): DriveApiException? {
+        var current = throwable
+        while (current != null) {
+            if (current is DriveApiException) return current
+            current = current.cause
+        }
+        return null
+    }
 }

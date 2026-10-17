@@ -66,4 +66,12 @@ interface RandomAccessSourceFactory {
      * Opens a [RandomAccessSource] for the given local SAF content [uri].
      */
     suspend fun openLocal(uri: String): RandomAccessSource
+
+    /**
+     * Opens a streaming [RandomAccessSource] for the given remote Google Drive [fileId] and [sizeBytes].
+     */
+    suspend fun openDrive(
+        fileId: String,
+        sizeBytes: Long
+    ): RandomAccessSource = throw UnsupportedOperationException()
 }

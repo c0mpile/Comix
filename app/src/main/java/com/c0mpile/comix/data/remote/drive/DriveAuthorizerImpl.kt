@@ -92,7 +92,7 @@ class DriveAuthorizerImpl(
             val email = googleIdTokenCredential.id
 
             val authRequestBuilder = AuthorizationRequest.builder()
-                .setRequestedScopes(listOf(Scope(DRIVE_READONLY_SCOPE)))
+                .setRequestedScopes(listOf(Scope(DRIVE_READONLY_SCOPE), Scope(DRIVE_APPDATA_SCOPE)))
             if (email.isNotBlank()) {
                 authRequestBuilder.setAccount(Account(email, GOOGLE_ACCOUNT_TYPE))
             }
@@ -185,7 +185,7 @@ class DriveAuthorizerImpl(
 
         val result: Result<String> = try {
             val authRequestBuilder = AuthorizationRequest.builder()
-                .setRequestedScopes(listOf(Scope(DRIVE_READONLY_SCOPE)))
+                .setRequestedScopes(listOf(Scope(DRIVE_READONLY_SCOPE), Scope(DRIVE_APPDATA_SCOPE)))
             if (account.email.isNotBlank()) {
                 authRequestBuilder.setAccount(Account(account.email, GOOGLE_ACCOUNT_TYPE))
             }
@@ -193,18 +193,53 @@ class DriveAuthorizerImpl(
 
             val authResult = Identity.getAuthorizationClient(context).authorize(authRequest).await()
             val token = authResult.accessToken
-            if (authResult.hasResolution() || token == null) {
-                onAuthExpired("Consent resolution required for token refresh")
-                Result.failure(DriveApiException(ComicError.AuthExpired))
-            } else {
+            if (!authResult.hasResolution() && token != null) {
                 cachedAccessToken = token
                 Result.success(token)
+            } else {
+                val fallbackRequest = AuthorizationRequest.builder()
+                    .setRequestedScopes(listOf(Scope(DRIVE_READONLY_SCOPE)))
+                    .apply {
+                        if (account.email.isNotBlank()) {
+                            setAccount(Account(account.email, GOOGLE_ACCOUNT_TYPE))
+                        }
+                    }.build()
+                val fallbackResult = Identity.getAuthorizationClient(context).authorize(fallbackRequest).await()
+                val fallbackToken = fallbackResult.accessToken
+                if (fallbackResult.hasResolution() || fallbackToken == null) {
+                    onAuthExpired("Consent resolution required for token refresh")
+                    Result.failure(DriveApiException(ComicError.AuthExpired))
+                } else {
+                    cachedAccessToken = fallbackToken
+                    Result.success(fallbackToken)
+                }
             }
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            onAuthExpired(e.message ?: "Failed to refresh token")
-            Result.failure(DriveApiException(ComicError.AuthExpired, cause = e))
+        } catch (_: Exception) {
+            try {
+                val fallbackRequest = AuthorizationRequest.builder()
+                    .setRequestedScopes(listOf(Scope(DRIVE_READONLY_SCOPE)))
+                    .apply {
+                        if (account.email.isNotBlank()) {
+                            setAccount(Account(account.email, GOOGLE_ACCOUNT_TYPE))
+                        }
+                    }.build()
+                val fallbackResult = Identity.getAuthorizationClient(context).authorize(fallbackRequest).await()
+                val fallbackToken = fallbackResult.accessToken
+                if (fallbackResult.hasResolution() || fallbackToken == null) {
+                    onAuthExpired("Consent resolution required for token refresh")
+                    Result.failure(DriveApiException(ComicError.AuthExpired))
+                } else {
+                    cachedAccessToken = fallbackToken
+                    Result.success(fallbackToken)
+                }
+            } catch (fallbackEx: CancellationException) {
+                throw fallbackEx
+            } catch (fallbackEx: Exception) {
+                onAuthExpired(fallbackEx.message ?: "Failed to refresh token")
+                Result.failure(DriveApiException(ComicError.AuthExpired, cause = fallbackEx))
+            }
         }
         result
     }
@@ -228,6 +263,7 @@ class DriveAuthorizerImpl(
 
     companion object {
         private const val DRIVE_READONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
+        private const val DRIVE_APPDATA_SCOPE = "https://www.googleapis.com/auth/drive.appdata"
         private const val GOOGLE_ACCOUNT_TYPE = "com.google"
     }
 }

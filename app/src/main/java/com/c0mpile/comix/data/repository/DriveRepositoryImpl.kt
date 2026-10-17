@@ -5,10 +5,13 @@ import android.content.Intent
 import com.c0mpile.comix.data.local.dao.ComicDao
 import com.c0mpile.comix.data.local.dao.DriveAccountDao
 import com.c0mpile.comix.data.local.dao.DriveFolderDao
+import com.c0mpile.comix.data.local.dao.ReadingProgressDao
 import com.c0mpile.comix.data.local.entity.ComicEntity
 import com.c0mpile.comix.data.local.entity.DriveAccountEntity
 import com.c0mpile.comix.data.local.entity.DriveFolderEntity
+import com.c0mpile.comix.data.local.entity.ReadingProgressEntity
 import com.c0mpile.comix.data.remote.drive.DriveApiClient
+import com.c0mpile.comix.data.remote.drive.DriveApiException
 import com.c0mpile.comix.data.remote.drive.DriveAuthorizer
 import com.c0mpile.comix.data.remote.drive.MIME_TYPE_FOLDER
 import com.c0mpile.comix.data.remote.drive.MIME_TYPE_SHORTCUT
@@ -32,6 +35,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 /**
  * Implementation of [DriveRepository] managing Google Drive account persistence,
@@ -45,8 +51,40 @@ class DriveRepositoryImpl @Inject constructor(
     private val driveAccountDao: DriveAccountDao,
     private val driveFolderDao: DriveFolderDao,
     private val comicDao: ComicDao,
+    private val readingProgressDao: ReadingProgressDao,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) : DriveRepository {
+
+    constructor(
+        authorizer: DriveAuthorizer,
+        apiClient: DriveApiClient,
+        driveSource: DriveSource,
+        driveAccountDao: DriveAccountDao,
+        driveFolderDao: DriveFolderDao,
+        comicDao: ComicDao,
+        ioDispatcher: CoroutineDispatcher
+    ) : this(
+        authorizer = authorizer,
+        apiClient = apiClient,
+        driveSource = driveSource,
+        driveAccountDao = driveAccountDao,
+        driveFolderDao = driveFolderDao,
+        comicDao = comicDao,
+        readingProgressDao = object : ReadingProgressDao {
+            override fun observeProgress(comicKey: String): kotlinx.coroutines.flow.Flow<ReadingProgressEntity?> =
+                kotlinx.coroutines.flow.emptyFlow()
+            override suspend fun getProgress(comicKey: String): ReadingProgressEntity? = null
+            override suspend fun getAllProgress(): List<ReadingProgressEntity> = emptyList()
+            override suspend fun upsertProgress(progress: ReadingProgressEntity) {}
+            override suspend fun upsertAllProgress(progressList: List<ReadingProgressEntity>) {}
+        },
+        ioDispatcher = ioDispatcher
+    )
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
 
     override fun observeAuthState(): Flow<DriveAuthState> =
         authorizer.observeAuthState()
@@ -60,6 +98,7 @@ class DriveRepositoryImpl @Inject constructor(
                     signedInAtEpochMillis = account.signedInAtEpochMillis
                 )
             )
+            runCatching { syncReadingProgress() }
         }
     }
 
@@ -75,6 +114,7 @@ class DriveRepositoryImpl @Inject constructor(
                     signedInAtEpochMillis = account.signedInAtEpochMillis
                 )
             )
+            runCatching { syncReadingProgress() }
         }
     }
 
@@ -265,6 +305,7 @@ class DriveRepositoryImpl @Inject constructor(
             }
 
             driveFolderDao.updateLastScanned(folderId, System.currentTimeMillis())
+            runCatching { syncReadingProgress() }
 
             Result.success(
                 ScanResult(
@@ -396,6 +437,8 @@ class DriveRepositoryImpl @Inject constructor(
                 driveAccountDao.updateChangesPageToken(newStartPageToken)
             }
 
+            runCatching { syncReadingProgress() }
+
             Result.success(result)
         } catch (e: Exception) {
             Result.failure(e)
@@ -432,4 +475,123 @@ class DriveRepositoryImpl @Inject constructor(
             )
         )
     }
+
+    override suspend fun syncReadingProgress(): Result<Int> = withContext(ioDispatcher) {
+        if (driveAccountDao.getAccount() == null) {
+            return@withContext Result.success(0)
+        }
+
+        try {
+            val localList = readingProgressDao.getAllProgress()
+            val remoteJson = apiClient.readProgressSyncPayload()
+
+            val remotePayload = if (!remoteJson.isNullOrBlank()) {
+                runCatching {
+                    json.decodeFromString<SyncedReadingProgressPayload>(remoteJson)
+                }.getOrNull()
+            } else {
+                null
+            }
+
+            val localMap = localList.associateBy { it.comicKey }
+            val remoteMap = (remotePayload?.entries ?: emptyList()).associateBy { it.comicKey }
+            val allKeys = localMap.keys + remoteMap.keys
+
+            val toUpsertLocal = mutableListOf<ReadingProgressEntity>()
+            val mergedRemoteEntries = mutableListOf<SyncedReadingProgressEntry>()
+            var remoteNeedsUpdate = false
+
+            for (key in allKeys) {
+                val local = localMap[key]
+                val remote = remoteMap[key]
+
+                when {
+                    local == null && remote != null -> {
+                        toUpsertLocal.add(
+                            ReadingProgressEntity(
+                                comicKey = remote.comicKey,
+                                currentPage = remote.currentPage,
+                                pageCount = remote.pageCount,
+                                isFinished = remote.isFinished,
+                                updatedAtEpochMillis = remote.updatedAtEpochMillis
+                            )
+                        )
+                        mergedRemoteEntries.add(remote)
+                    }
+
+                    local != null && remote == null -> {
+                        mergedRemoteEntries.add(
+                            SyncedReadingProgressEntry(
+                                comicKey = local.comicKey,
+                                currentPage = local.currentPage,
+                                pageCount = local.pageCount,
+                                isFinished = local.isFinished,
+                                updatedAtEpochMillis = local.updatedAtEpochMillis
+                            )
+                        )
+                        remoteNeedsUpdate = true
+                    }
+
+                    local != null && remote != null -> {
+                        if (remote.updatedAtEpochMillis > local.updatedAtEpochMillis) {
+                            toUpsertLocal.add(
+                                ReadingProgressEntity(
+                                    comicKey = remote.comicKey,
+                                    currentPage = remote.currentPage,
+                                    pageCount = remote.pageCount,
+                                    isFinished = remote.isFinished,
+                                    updatedAtEpochMillis = remote.updatedAtEpochMillis
+                                )
+                            )
+                            mergedRemoteEntries.add(remote)
+                        } else if (local.updatedAtEpochMillis > remote.updatedAtEpochMillis) {
+                            mergedRemoteEntries.add(
+                                SyncedReadingProgressEntry(
+                                    comicKey = local.comicKey,
+                                    currentPage = local.currentPage,
+                                    pageCount = local.pageCount,
+                                    isFinished = local.isFinished,
+                                    updatedAtEpochMillis = local.updatedAtEpochMillis
+                                )
+                            )
+                            remoteNeedsUpdate = true
+                        } else {
+                            mergedRemoteEntries.add(remote)
+                        }
+                    }
+                }
+            }
+
+            if (toUpsertLocal.isNotEmpty()) {
+                readingProgressDao.upsertAllProgress(toUpsertLocal)
+            }
+
+            if (remoteNeedsUpdate || (remotePayload == null && mergedRemoteEntries.isNotEmpty())) {
+                val newPayload = SyncedReadingProgressPayload(version = 1, entries = mergedRemoteEntries)
+                val newJson = json.encodeToString(newPayload)
+                apiClient.writeProgressSyncPayload(newJson)
+            }
+
+            Result.success(toUpsertLocal.size)
+        } catch (e: DriveApiException) {
+            Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }
+
+@Serializable
+data class SyncedReadingProgressEntry(
+    val comicKey: String,
+    val currentPage: Int,
+    val pageCount: Int,
+    val isFinished: Boolean,
+    val updatedAtEpochMillis: Long
+)
+
+@Serializable
+data class SyncedReadingProgressPayload(
+    val version: Int = 1,
+    val entries: List<SyncedReadingProgressEntry> = emptyList()
+)

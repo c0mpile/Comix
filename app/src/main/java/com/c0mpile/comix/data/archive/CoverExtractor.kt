@@ -34,7 +34,9 @@ class CoverExtractor @Inject constructor(
     suspend fun getOrExtractCoverFile(
         comicKey: String,
         localUri: String?,
-        existingCachePath: String? = null
+        existingCachePath: String? = null,
+        driveFileId: String? = null,
+        sizeBytes: Long = 0L
     ): File? = withContext(ioDispatcher) {
         if (!existingCachePath.isNullOrBlank()) {
             val existingFile = File(existingCachePath)
@@ -44,12 +46,13 @@ class CoverExtractor @Inject constructor(
         }
 
         val coversDir = File(context.cacheDir, "covers")
-        val targetFile = File(coversDir, "$comicKey.webp")
+        val safeKey = comicKey.replace(':', '_')
+        val targetFile = File(coversDir, "$safeKey.webp")
         if (targetFile.exists() && targetFile.length() > 0L) {
             return@withContext targetFile
         }
 
-        if (localUri == null) {
+        if (localUri == null && driveFileId.isNullOrBlank()) {
             return@withContext null
         }
 
@@ -58,9 +61,13 @@ class CoverExtractor @Inject constructor(
                 coversDir.mkdirs()
             }
 
-            val source = randomAccessSourceFactory.openLocal(localUri)
+            val source = if (!localUri.isNullOrBlank()) {
+                randomAccessSourceFactory.openLocal(localUri)
+            } else {
+                randomAccessSourceFactory.openDrive(driveFileId!!, sizeBytes)
+            }
             val detectedFormat = comicDao.getComicWithProgress(comicKey)?.comic?.format
-                ?: if (localUri.endsWith(".pdf", ignoreCase = true)) {
+                ?: if (localUri?.endsWith(".pdf", ignoreCase = true) == true) {
                     ComicFormat.PDF
                 } else {
                     val header = ByteArray(8)

@@ -226,7 +226,7 @@ class LibraryScreenTest {
     }
 
     @Test
-    fun remoteDriveComicShowsInDriveBadgeAndClickShowsSnackbarWithoutOpening() {
+    fun remoteDriveComicShowsInDriveBadgeAndClickInvokesOpenComicForStreamedReading() {
         var openedComicKey: String? = null
 
         val remoteComic = Comic(
@@ -267,8 +267,7 @@ class LibraryScreenTest {
 
         composeTestRule.onNodeWithText("Remote Comic #1").performClick()
 
-        assertNull(openedComicKey)
-        composeTestRule.onNodeWithText("Reading Drive comics is not available yet").assertIsDisplayed()
+        assertEquals("md5:abcd1234efgh5678", openedComicKey)
     }
 
     @Test

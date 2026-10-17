@@ -4,13 +4,13 @@ Comix is a Material Design 3 comic book reader for Android built with Kotlin and
 
 ## Features
 
-- **Library Management:** Add one or more local comic folders via Android's Storage Access Framework (`ACTION_OPEN_DOCUMENT_TREE`) with persisted URI permissions, or connect a Google Drive account to browse and add Drive folders.
-- **Google Drive Integration (Phase 2 - Auth, Browsing, and Listing):** Sign in with Google via Credential Manager and Play Services Identity (`drive.readonly`), browse folders and folder shortcuts in `My Drive`, recursively index remote `.cbz` files by MD5 (`comicKey = "md5:<checksum>"`), perform incremental sync via the Drive `changes` API with full-rescan fallback, and display `In Drive` badges and placeholder covers in the unified Library grid.
-- **Fast Folder Scanning:** Off-main-thread directory traversal using `DocumentsContract` queries (local) and paginated Drive REST v3 BFS traversal with shortcut cycle detection (remote), incremental metadata indexing in Room (schema v2 with explicit `MIGRATION_1_2`), and content-based identity keys.
-- **Cover Grid with Search and Sort:** Responsive Material 3 cover grid with automatic Page 1 cover extraction, downsampled WebP disk caching, Coil 3 integration, real-time title/filename search filtering, and persistent sorting (`Title A to Z`, `Title Z to A`, `Recently read`, `Date added`).
-- **CBZ Archive Reader:** Random-access ZIP/CBZ parser (`RandomAccessSource`) supporting standard and ZIP64 archives, natural alphanumeric page sorting, and bounded LRU page bitmap caching (`ReaderPageCache`).
-- **Immersive Reader Experience:** Full-screen horizontal pager (`HorizontalPager`) with left-to-right (`LTR`) and right-to-left (`RTL`) reading directions, `Fit Screen` and `Fit Width` scale modes, pinch-to-zoom (`1x` to `4x`), double-tap zoom (`1x` / `2.5x`), edge-clamped panning, directional left/right tap zones, HUD overlay with quick toggles and page scrubber, `Keep screen on` support, and automatic per-comic reading progress persistence.
-- **Settings Screen (DataStore Preferences & Google Drive):** Configure application theme (`System default`, `Light`, `Dark`), default reading direction (`Left to right`, `Right to left`), page scale mode (`Fit screen`, `Fit width`), `Keep screen on`, local library folders, and Google Drive account/folders.
+- **Multiple Libraries & Collapsible Side Menu:** Manage separate named libraries (pre-seeded with **Comics** in `Left to right` mode and **Manga** in `Right to left` mode, plus custom user-created libraries) from a collapsible Material 3 `ModalNavigationDrawer` side menu.
+- **Supported Comic Formats (CBZ & PDF):** Read both `.cbz` (standard and ZIP64 archives via random-access `CbzArchiveReader`) and `.pdf` (rendered via Android's `PdfRenderer` in `PdfArchiveReader`) files from local SAF folders and Google Drive folders.
+- **Embedded Comic Metadata (`ComicInfo.xml`):** Automatically extract and persist embedded `ComicInfo.xml` metadata (`Title`, `Series`, `Number`, `Volume`, `Summary`, `Writer`, `Penciller`, `Publisher`, `Genre`, and release date) during library scans, searchable from the library filter bar and viewable in a dedicated `ComicDetailsDialog`.
+- **Filtering Section (Search + Status Tabs) & Grid / List View Toggle:** Filter comics within the active library by real-time search query (`title`, `fileName`, `series`, `writer`, `publisher`, `genre`) and reading status tabs (`All`, `In Progress`, `Finished`), and switch between the responsive Cover Grid and compact List View (`LibraryLayoutMode`).
+- **Google Drive Integration (Auth, Browsing, Streamed Reading, and Progress Sync):** Sign in with Google via Credential Manager and Play Services Identity (`drive.readonly` and `drive.appdata`), browse folders and folder shortcuts in `My Drive`, stream remote `.cbz` and `.pdf` comics on demand via HTTP `Range` chunk requests (`DriveStreamingRandomAccessSource`) with automatic cover extraction and a 128 MB disk chunk cache, and synchronize reading progress across devices via `appDataFolder/comix_reading_progress.json`.
+- **Immersive Reader Experience:** Full-screen horizontal pager (`HorizontalPager`) with per-library default reading direction (`LTR` / `RTL`), `Fit Screen` and `Fit Width` scale modes, pinch-to-zoom (`1x` to `4x`), double-tap zoom (`1x` / `2.5x`), edge-clamped panning, directional left/right tap zones, HUD overlay with quick toggles and page scrubber, `Keep screen on` support, and automatic per-comic reading progress persistence.
+- **Settings Screen (DataStore Preferences & Google Drive):** Configure application theme (`System default`, `Light`, `Dark`), default reading direction, page scale mode, `Keep screen on`, local library folders, and Google Drive account/folders.
 - **Resilient Error Handling:** Explicit UI states for corrupt archives, empty archives, missing files, revoked folder permissions, expired or revoked Google Drive tokens, rate limits, network unavailability, and out-of-memory conditions.
 
 ## Tech Stack
@@ -19,7 +19,7 @@ Comix is a Material Design 3 comic book reader for Android built with Kotlin and
 - **UI:** Jetpack Compose (`BOM 2026.09.00`) with Material 3 (`dynamicColor` support, light/dark themes, edge-to-edge layout)
 - **Architecture:** Single-activity MVVM (`ui`, `domain`, `data` layers) with unidirectional `StateFlow` state
 - **Dependency Injection:** Hilt (`2.60.1`)
-- **Persistence:** Room (`2.8.5`, schema v2) with exported schemas under `app/schemas/`, and Jetpack DataStore Preferences (`1.2.1`) for user settings
+- **Persistence:** Room (`2.8.5`, schema v4 with `MIGRATION_1_2`, `MIGRATION_2_3`, and `MIGRATION_3_4`) with exported schemas under `app/schemas/`, and Jetpack DataStore Preferences (`1.2.1`) for user settings
 - **Networking & Auth:** OkHttp (`5.5.0`), AndroidX Credentials (`1.6.0`), Google Identity (`1.2.1`), and Play Services Auth (`22.0.0`)
 - **Navigation:** Navigation Compose (`2.10.2`) with type-safe Kotlin Serialization routes (`LibraryRoute`, `ReaderRoute`, `SettingsRoute`, `DriveFolderPickerRoute`)
 - **Image Loading:** Coil 3 (`3.6.3`) with custom `ComicCoverFetcher`
@@ -91,20 +91,20 @@ app/src/main/java/com/c0mpile/comix/
   MainViewModel.kt       ViewModel observing user theme preferences for MainActivity
   di/                    Hilt modules (Dispatchers, Database, DataStore, Network, Drive, Source, Archive, Repository)
   data/
-    local/               Room database (v2), migrations, entities, projections, converters, and DAOs
+    local/               Room database (v4), migrations, entities, projections, converters, and DAOs
     remote/drive/        Drive REST v3 client (OkHttpDriveApiClient), DriveAuthorizerImpl, RetryPolicy, and DTOs
-    source/              ComicSource, RandomAccessSource, LocalSource, DriveSource, Sha256ComicKeyHasher
-    archive/             ComicArchiveReader, CbzArchiveReader, CoverExtractor, ComicCoverFetcher
+    source/              ComicSource, RandomAccessSource, LocalRandomAccessSource, DriveStreamingRandomAccessSource, LocalSource, DriveSource, Sha256ComicKeyHasher
+    archive/             ComicArchiveReader, CbzArchiveReader, PdfArchiveReader, CompositeComicArchiveReaderFactory, ComicInfoXmlParser, CoverExtractor, ComicCoverFetcher
     repository/          LibraryRepositoryImpl, ReaderRepositoryImpl, SettingsRepositoryImpl, and DriveRepositoryImpl
   domain/
-    model/               Domain models (Comic, ReadingProgress, LibraryFolder, DriveAccount, DriveAuthState, DriveFolder, UserSettings)
+    model/               Domain models (Comic, ComicLibrary, ComicMetadata, LibraryFilterTab, LibraryLayoutMode, ReadingProgress, LibraryFolder, DriveAccount, DriveAuthState, DriveFolder, UserSettings)
     repository/          LibraryRepository, ReaderRepository, SettingsRepository, and DriveRepository interfaces
     usecase/             Library, Reader, Settings, and Drive use cases
   ui/
     theme/               Color, Type, Shape, ComixDimens, and ComixTheme
     components/          EmptyStateView, ErrorStateView, and LoadingStateView
     navigation/          Type-safe ComixRoutes and ComixNavHost
-    library/             LibraryScreen, ComicGridItem, LibraryViewModel, and LibraryUiState
+    library/             LibraryScreen, ComicGridItem, ComicListItem, ComicDetailsDialog, LibraryViewModel, and LibraryUiState
     reader/              ReaderScreen, ZoomablePageImage, ReaderOverlayHud, ReaderPageCache, ReaderViewModel
     settings/            SettingsScreen, SettingsViewModel, and SettingsUiState
     drive/               DriveFolderPickerScreen, DriveFolderPickerViewModel, and DriveFolderPickerUiState
