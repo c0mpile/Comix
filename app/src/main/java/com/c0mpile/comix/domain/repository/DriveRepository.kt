@@ -40,4 +40,5 @@ interface DriveRepository {
     suspend fun rescanDriveFoldersForLibrary(libraryId: String): Result<ScanResult> =
         incrementalSync()
     suspend fun incrementalSync(): Result<ScanResult>
+    suspend fun syncReadingProgress(): Result<Int> = Result.success(0)
 }
