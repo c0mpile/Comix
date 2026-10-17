@@ -55,6 +55,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,6 +72,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import com.c0mpile.comix.R
 import com.c0mpile.comix.domain.model.Comic
 import com.c0mpile.comix.domain.model.ComicAvailability
@@ -135,7 +137,9 @@ fun LibraryScreenContent(
     onOpenSettings: () -> Unit = {}
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
     val dismissLabel = stringResource(R.string.snackbar_dismiss)
+    val driveReadingUnavailableMessage = stringResource(R.string.snackbar_drive_reading_unavailable)
     var isSortMenuExpanded by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
 
@@ -173,6 +177,13 @@ fun LibraryScreenContent(
         is ComicError.EmptyArchive -> stringResource(R.string.empty_no_comics_title)
         is ComicError.FileNotFound -> stringResource(R.string.error_unknown)
         is ComicError.OutOfMemory -> stringResource(R.string.error_unknown)
+        is ComicError.AuthExpired, is ComicError.AuthRevoked ->
+            stringResource(R.string.error_drive_auth_expired)
+        is ComicError.NetworkUnavailable ->
+            stringResource(R.string.error_drive_network_unavailable)
+        is ComicError.RateLimited ->
+            stringResource(R.string.error_drive_rate_limited)
+        is ComicError.DriveApiError -> err.message ?: stringResource(R.string.error_unknown)
         null -> null
     }
 
@@ -389,7 +400,18 @@ fun LibraryScreenContent(
                             ) { comic ->
                                 ComicGridItem(
                                     comic = comic,
-                                    onClick = { onOpenComic(comic.comicKey) }
+                                    onClick = {
+                                        if (comic.availability == ComicAvailability.REMOTE) {
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar(
+                                                    message = driveReadingUnavailableMessage,
+                                                    duration = SnackbarDuration.Short
+                                                )
+                                            }
+                                        } else {
+                                            onOpenComic(comic.comicKey)
+                                        }
+                                    }
                                 )
                             }
                         }

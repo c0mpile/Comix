@@ -3,7 +3,10 @@ package com.c0mpile.comix.di
 import android.content.Context
 import androidx.room.Room
 import com.c0mpile.comix.data.local.ComixDatabase
+import com.c0mpile.comix.data.local.ComixMigrations
 import com.c0mpile.comix.data.local.dao.ComicDao
+import com.c0mpile.comix.data.local.dao.DriveAccountDao
+import com.c0mpile.comix.data.local.dao.DriveFolderDao
 import com.c0mpile.comix.data.local.dao.LibraryFolderDao
 import com.c0mpile.comix.data.local.dao.ReadingProgressDao
 import dagger.Module
@@ -23,6 +26,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): ComixDatabase =
         Room.databaseBuilder(context, ComixDatabase::class.java, "comix.db")
+            .addMigrations(ComixMigrations.MIGRATION_1_2)
             .build()
 
     @Provides
@@ -33,4 +37,10 @@ object DatabaseModule {
 
     @Provides
     fun provideLibraryFolderDao(db: ComixDatabase): LibraryFolderDao = db.libraryFolderDao()
+
+    @Provides
+    fun provideDriveAccountDao(db: ComixDatabase): DriveAccountDao = db.driveAccountDao()
+
+    @Provides
+    fun provideDriveFolderDao(db: ComixDatabase): DriveFolderDao = db.driveFolderDao()
 }

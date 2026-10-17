@@ -5,5 +5,9 @@ package com.c0mpile.comix.domain.model
  */
 enum class ComicSourceType {
     LOCAL_SAF,
-    GOOGLE_DRIVE
+    GOOGLE_DRIVE;
+
+    companion object {
+        val DRIVE: ComicSourceType = GOOGLE_DRIVE
+    }
 }

@@ -1,21 +1,12 @@
 package com.c0mpile.comix.ui.navigation
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.toRoute
+import com.c0mpile.comix.ui.drive.DriveFolderPickerScreen
 import com.c0mpile.comix.ui.library.LibraryScreen
 import com.c0mpile.comix.ui.reader.ReaderScreen
 import com.c0mpile.comix.ui.settings.SettingsScreen
@@ -54,6 +45,17 @@ fun ComixNavHost(
 
         composable<SettingsRoute> {
             SettingsScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onNavigateToDriveFolderPicker = {
+                    navController.navigate(DriveFolderPickerRoute)
+                }
+            )
+        }
+
+        composable<DriveFolderPickerRoute> {
+            DriveFolderPickerScreen(
                 onNavigateBack = {
                     navController.popBackStack()
                 }

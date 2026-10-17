@@ -3,13 +3,16 @@ package com.c0mpile.comix.ui.library
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.c0mpile.comix.data.archive.NaturalOrderComparator
+import com.c0mpile.comix.data.remote.drive.DriveApiException
 import com.c0mpile.comix.domain.model.ComicError
 import com.c0mpile.comix.domain.model.LibrarySortOrder
 import com.c0mpile.comix.domain.usecase.AddLibraryFolderUseCase
+import com.c0mpile.comix.domain.usecase.ObserveDriveFoldersUseCase
 import com.c0mpile.comix.domain.usecase.ObserveLibraryComicsUseCase
 import com.c0mpile.comix.domain.usecase.ObserveLibraryFoldersUseCase
 import com.c0mpile.comix.domain.usecase.ObserveUserSettingsUseCase
 import com.c0mpile.comix.domain.usecase.RemoveLibraryFolderUseCase
+import com.c0mpile.comix.domain.usecase.RescanDriveUseCase
 import com.c0mpile.comix.domain.usecase.RescanLibraryUseCase
 import com.c0mpile.comix.domain.usecase.UpdateLibrarySortOrderUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,14 +27,16 @@ import kotlinx.coroutines.launch
 
 /**
  * ViewModel managing the Library screen state, search query filtering, sort orders,
- * folder observation, scanning, and user events.
+ * local and Google Drive folder observation, scanning, and user events.
  */
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     observeLibraryComicsUseCase: ObserveLibraryComicsUseCase,
     observeLibraryFoldersUseCase: ObserveLibraryFoldersUseCase,
+    observeDriveFoldersUseCase: ObserveDriveFoldersUseCase,
     private val addLibraryFolderUseCase: AddLibraryFolderUseCase,
     private val rescanLibraryUseCase: RescanLibraryUseCase,
+    private val rescanDriveUseCase: RescanDriveUseCase,
     private val removeLibraryFolderUseCase: RemoveLibraryFolderUseCase,
     private val observeUserSettingsUseCase: ObserveUserSettingsUseCase,
     private val updateLibrarySortOrderUseCase: UpdateLibrarySortOrderUseCase
@@ -54,10 +59,10 @@ class LibraryViewModel @Inject constructor(
     val uiState: StateFlow<LibraryUiState> = combine(
         observeLibraryComicsUseCase(),
         observeLibraryFoldersUseCase(),
+        observeDriveFoldersUseCase(),
         observeUserSettingsUseCase(),
-        scannerState,
-        searchState
-    ) { rawComics, folders, settings, scan, search ->
+        combine(scannerState, searchState) { scan, search -> Pair(scan, search) }
+    ) { rawComics, folders, driveFolders, settings, (scan, search) ->
         val totalCount = rawComics.size
         val revoked = folders.filter { !it.hasPersistedPermission }
 
@@ -92,6 +97,7 @@ class LibraryViewModel @Inject constructor(
         LibraryUiState(
             comics = sortedComics,
             folders = folders,
+            driveFolders = driveFolders,
             isInitialLoading = false,
             isScanning = scan.isScanning,
             revokedFolders = revoked,
@@ -143,25 +149,43 @@ class LibraryViewModel @Inject constructor(
                     scannerState.update {
                         it.copy(isScanning = true, activeError = null, scanFailureCount = 0)
                     }
-                    val result = rescanLibraryUseCase()
-                    result.onSuccess { scanResult ->
-                        val nonArchiveError = scanResult.errors.firstOrNull {
+                    val localResult = rescanLibraryUseCase()
+                    var activeError: ComicError? = null
+                    var failureCount = 0
+
+                    localResult.onSuccess { scanResult ->
+                        failureCount += scanResult.skippedCorruptCount
+                        activeError = scanResult.errors.firstOrNull {
                             it !is ComicError.CorruptArchive && it !is ComicError.EmptyArchive
                         }
-                        scannerState.update {
-                            it.copy(
-                                isScanning = false,
-                                scanFailureCount = scanResult.skippedCorruptCount,
-                                activeError = nonArchiveError
-                            )
-                        }
                     }.onFailure { throwable ->
-                        scannerState.update {
-                            it.copy(
-                                isScanning = false,
-                                activeError = ComicError.UnknownIoError(throwable.message)
-                            )
+                        activeError = ComicError.UnknownIoError(throwable.message)
+                    }
+
+                    val currentDriveFolders = uiState.value.driveFolders
+                    if (currentDriveFolders.isNotEmpty()) {
+                        val driveResult = rescanDriveUseCase()
+                        driveResult.onSuccess { scanResult ->
+                            failureCount += scanResult.skippedCorruptCount
+                            if (activeError == null) {
+                                activeError = scanResult.errors.firstOrNull {
+                                    it !is ComicError.CorruptArchive && it !is ComicError.EmptyArchive
+                                }
+                            }
+                        }.onFailure { throwable ->
+                            if (activeError == null) {
+                                activeError = (throwable as? DriveApiException)?.comicError
+                                    ?: ComicError.UnknownIoError(throwable.message)
+                            }
                         }
+                    }
+
+                    scannerState.update {
+                        it.copy(
+                            isScanning = false,
+                            scanFailureCount = failureCount,
+                            activeError = activeError
+                        )
                     }
                 }
             }

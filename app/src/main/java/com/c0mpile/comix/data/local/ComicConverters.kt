@@ -19,7 +19,8 @@ class ComicConverters {
     fun fromComicSourceType(value: ComicSourceType): String = value.name
 
     @TypeConverter
-    fun toComicSourceType(value: String): ComicSourceType = ComicSourceType.valueOf(value)
+    fun toComicSourceType(value: String): ComicSourceType =
+        if (value == "DRIVE") ComicSourceType.GOOGLE_DRIVE else ComicSourceType.valueOf(value)
 
     @TypeConverter
     fun fromComicAvailability(value: ComicAvailability): String = value.name

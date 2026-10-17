@@ -2,6 +2,8 @@ package com.c0mpile.comix.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -17,6 +19,7 @@ import com.c0mpile.comix.ui.library.LibraryUiEvent
 import com.c0mpile.comix.ui.library.LibraryUiState
 import com.c0mpile.comix.ui.theme.ComixTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -214,5 +217,51 @@ class LibraryScreenTest {
 
         composeTestRule.onNodeWithContentDescription("Search").performClick()
         assertEquals(LibraryUiEvent.SearchActiveChanged(true), dispatchedEvent)
+    }
+
+    @Test
+    fun remoteDriveComicShowsInDriveBadgeAndClickShowsSnackbarWithoutOpening() {
+        var openedComicKey: String? = null
+
+        val remoteComic = Comic(
+            comicKey = "md5:abcd1234efgh5678",
+            title = "Remote Comic #1",
+            fileName = "RemoteComic1.cbz",
+            format = ComicFormat.CBZ,
+            sourceType = ComicSourceType.GOOGLE_DRIVE,
+            availability = ComicAvailability.REMOTE,
+            sizeBytes = 10_000_000L,
+            lastModifiedEpochMillis = 1000L,
+            pageCount = 0,
+            localUri = null,
+            folderUri = "drive-folder-1",
+            driveFileId = "df-101",
+            driveMd5 = "abcd1234efgh5678"
+        )
+
+        val uiState = LibraryUiState(
+            isInitialLoading = false,
+            totalComicCount = 1,
+            comics = listOf(remoteComic)
+        )
+
+        composeTestRule.setContent {
+            ComixTheme {
+                LibraryScreenContent(
+                    uiState = uiState,
+                    onEvent = {},
+                    onAddFolderClick = {},
+                    onOpenComic = { openedComicKey = it }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Remote Comic #1").assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("In Drive").onFirst().assertIsDisplayed()
+
+        composeTestRule.onNodeWithText("Remote Comic #1").performClick()
+
+        assertNull(openedComicKey)
+        composeTestRule.onNodeWithText("Reading Drive comics is not available yet").assertIsDisplayed()
     }
 }
