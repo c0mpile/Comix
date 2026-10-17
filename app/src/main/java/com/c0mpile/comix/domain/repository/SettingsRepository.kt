@@ -1,6 +1,7 @@
 package com.c0mpile.comix.domain.repository
 
 import com.c0mpile.comix.domain.model.AppThemeMode
+import com.c0mpile.comix.domain.model.LibraryLayoutMode
 import com.c0mpile.comix.domain.model.LibrarySortOrder
 import com.c0mpile.comix.domain.model.ReaderScaleMode
 import com.c0mpile.comix.domain.model.ReadingDirection
@@ -17,4 +18,6 @@ interface SettingsRepository {
     suspend fun setReaderScaleMode(scaleMode: ReaderScaleMode)
     suspend fun setKeepScreenOn(enabled: Boolean)
     suspend fun setLibrarySortOrder(sortOrder: LibrarySortOrder)
+    suspend fun setActiveLibraryId(libraryId: String) {}
+    suspend fun setLibraryLayoutMode(layoutMode: LibraryLayoutMode) {}
 }

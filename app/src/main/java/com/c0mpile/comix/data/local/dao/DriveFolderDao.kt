@@ -14,8 +14,14 @@ interface DriveFolderDao {
     @Query("SELECT * FROM drive_folders ORDER BY added_at_epoch_millis ASC")
     fun observeAllFolders(): Flow<List<DriveFolderEntity>>
 
+    @Query("SELECT * FROM drive_folders WHERE library_id = :libraryId ORDER BY added_at_epoch_millis ASC")
+    fun observeFoldersByLibrary(libraryId: String): Flow<List<DriveFolderEntity>>
+
     @Query("SELECT * FROM drive_folders ORDER BY added_at_epoch_millis ASC")
     suspend fun getAllFolders(): List<DriveFolderEntity>
+
+    @Query("SELECT * FROM drive_folders WHERE library_id = :libraryId ORDER BY added_at_epoch_millis ASC")
+    suspend fun getFoldersByLibrary(libraryId: String): List<DriveFolderEntity>
 
     @Query("SELECT * FROM drive_folders WHERE folder_id = :folderId LIMIT 1")
     suspend fun getFolder(folderId: String): DriveFolderEntity?
@@ -28,6 +34,9 @@ interface DriveFolderDao {
 
     @Query("DELETE FROM drive_folders WHERE folder_id = :folderId")
     suspend fun deleteFolder(folderId: String)
+
+    @Query("DELETE FROM drive_folders WHERE library_id = :libraryId")
+    suspend fun deleteFoldersByLibrary(libraryId: String)
 
     @Query("DELETE FROM drive_folders")
     suspend fun deleteAllFolders()

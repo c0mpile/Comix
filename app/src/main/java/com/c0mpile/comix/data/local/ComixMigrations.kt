@@ -21,4 +21,58 @@ object ComixMigrations {
             )
         }
     }
+
+    /**
+     * Migrates from schema version 2 to version 3 by adding the `libraries` table,
+     * seeding the built-in Comics and Manga libraries, and adding `library_id` columns
+     * and indices to `comics`, `library_folders`, and `drive_folders`.
+     */
+    val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `libraries` (`library_id` TEXT NOT NULL, `name` TEXT NOT NULL, `default_reading_direction` TEXT NOT NULL, `created_at_epoch_millis` INTEGER NOT NULL, `is_built_in` INTEGER NOT NULL, PRIMARY KEY(`library_id`))"
+            )
+            seedDefaultLibraries(db)
+            db.execSQL(
+                "ALTER TABLE `comics` ADD COLUMN `library_id` TEXT NOT NULL DEFAULT 'comics'"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_comics_library_id` ON `comics` (`library_id`)"
+            )
+            db.execSQL(
+                "ALTER TABLE `library_folders` ADD COLUMN `library_id` TEXT NOT NULL DEFAULT 'comics'"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_library_folders_library_id` ON `library_folders` (`library_id`)"
+            )
+            db.execSQL(
+                "ALTER TABLE `drive_folders` ADD COLUMN `library_id` TEXT NOT NULL DEFAULT 'comics'"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_drive_folders_library_id` ON `drive_folders` (`library_id`)"
+            )
+        }
+    }
+
+    /**
+     * Seeds the built-in Comics (`LEFT_TO_RIGHT`) and Manga (`RIGHT_TO_LEFT`) libraries
+     * when the `libraries` table is empty.
+     */
+    fun seedDefaultLibraries(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            INSERT OR IGNORE INTO `libraries` (`library_id`, `name`, `default_reading_direction`, `created_at_epoch_millis`, `is_built_in`)
+            SELECT 'comics', 'Comics', 'LEFT_TO_RIGHT', 0, 1
+            WHERE NOT EXISTS (SELECT 1 FROM `libraries`)
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            INSERT OR IGNORE INTO `libraries` (`library_id`, `name`, `default_reading_direction`, `created_at_epoch_millis`, `is_built_in`)
+            SELECT 'manga', 'Manga', 'RIGHT_TO_LEFT', 1, 1
+            WHERE (SELECT COUNT(*) FROM `libraries` WHERE `library_id` = 'comics' AND `created_at_epoch_millis` = 0) = 1
+              AND (SELECT COUNT(*) FROM `libraries`) = 1
+            """.trimIndent()
+        )
+    }
 }

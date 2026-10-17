@@ -129,4 +129,129 @@ class MigrationTest {
 
         dbV2.close()
     }
+
+    @Test
+    fun migrate2To3PreservesExistingDataSeedsDefaultLibrariesAndAddsLibraryIdColumns() {
+        val dbV2 = helper.createDatabase(TEST_DB, 2)
+
+        dbV2.execSQL(
+            """
+            INSERT INTO comics (
+                comic_key, title, file_name, format, source_type, availability,
+                size_bytes, last_modified_epoch_millis, page_count, local_uri, folder_uri
+            ) VALUES (
+                'local:comic2', 'Batman #1', 'batman_01.cbz', 'CBZ',
+                'LOCAL_SAF', 'LOCAL', 2048576, 1700000000000, 32,
+                'content://com.android.externalstorage.documents/tree/comics/batman_01.cbz',
+                'content://com.android.externalstorage.documents/tree/comics'
+            )
+            """.trimIndent()
+        )
+
+        dbV2.execSQL(
+            """
+            INSERT INTO library_folders (
+                folder_uri, display_name, added_at_epoch_millis, last_scanned_at_epoch_millis
+            ) VALUES (
+                'content://com.android.externalstorage.documents/tree/comics', 'Local Comics', 1700000000000, 1700000010000
+            )
+            """.trimIndent()
+        )
+
+        dbV2.execSQL(
+            """
+            INSERT INTO drive_folders (
+                folder_id, display_name, added_at_epoch_millis, last_scanned_at_epoch_millis, drive_id
+            ) VALUES (
+                'drive-folder-456', 'Drive Comics', 1700000000000, 1700000020000, 'shared-drive-xyz'
+            )
+            """.trimIndent()
+        )
+
+        dbV2.close()
+
+        val dbV3 = helper.runMigrationsAndValidate(TEST_DB, 3, true, ComixMigrations.MIGRATION_2_3)
+
+        val libraryCursor = dbV3.query("SELECT library_id, name, default_reading_direction, created_at_epoch_millis, is_built_in FROM libraries ORDER BY created_at_epoch_millis ASC")
+        assertTrue(libraryCursor.moveToFirst())
+        assertEquals("comics", libraryCursor.getString(0))
+        assertEquals("Comics", libraryCursor.getString(1))
+        assertEquals("LEFT_TO_RIGHT", libraryCursor.getString(2))
+        assertEquals(0L, libraryCursor.getLong(3))
+        assertEquals(1, libraryCursor.getInt(4))
+
+        assertTrue(libraryCursor.moveToNext())
+        assertEquals("manga", libraryCursor.getString(0))
+        assertEquals("Manga", libraryCursor.getString(1))
+        assertEquals("RIGHT_TO_LEFT", libraryCursor.getString(2))
+        assertEquals(1L, libraryCursor.getLong(3))
+        assertEquals(1, libraryCursor.getInt(4))
+        libraryCursor.close()
+
+        val comicCursor = dbV3.query("SELECT comic_key, title, library_id FROM comics WHERE comic_key = 'local:comic2'")
+        assertTrue(comicCursor.moveToFirst())
+        assertEquals("local:comic2", comicCursor.getString(0))
+        assertEquals("Batman #1", comicCursor.getString(1))
+        assertEquals("comics", comicCursor.getString(2))
+        comicCursor.close()
+
+        val folderCursor = dbV3.query("SELECT folder_uri, display_name, library_id FROM library_folders WHERE folder_uri = 'content://com.android.externalstorage.documents/tree/comics'")
+        assertTrue(folderCursor.moveToFirst())
+        assertEquals("content://com.android.externalstorage.documents/tree/comics", folderCursor.getString(0))
+        assertEquals("Local Comics", folderCursor.getString(1))
+        assertEquals("comics", folderCursor.getString(2))
+        folderCursor.close()
+
+        val driveFolderCursor = dbV3.query("SELECT folder_id, display_name, library_id FROM drive_folders WHERE folder_id = 'drive-folder-456'")
+        assertTrue(driveFolderCursor.moveToFirst())
+        assertEquals("drive-folder-456", driveFolderCursor.getString(0))
+        assertEquals("Drive Comics", driveFolderCursor.getString(1))
+        assertEquals("comics", driveFolderCursor.getString(2))
+        driveFolderCursor.close()
+
+        dbV3.close()
+    }
+
+    @Test
+    fun migrate1To3ChainSucceeds() {
+        val dbV1 = helper.createDatabase(TEST_DB, 1)
+
+        dbV1.execSQL(
+            """
+            INSERT INTO comics (
+                comic_key, title, file_name, format, source_type, availability,
+                size_bytes, last_modified_epoch_millis, page_count, local_uri, folder_uri
+            ) VALUES (
+                'local:comic1', 'Amazing Spider-Man #1', 'spiderman_01.cbz', 'CBZ',
+                'LOCAL_SAF', 'LOCAL', 1048576, 1700000000000, 24,
+                'content://com.android.externalstorage.documents/tree/comics/spiderman_01.cbz',
+                'content://com.android.externalstorage.documents/tree/comics'
+            )
+            """.trimIndent()
+        )
+
+        dbV1.close()
+
+        val dbV3 = helper.runMigrationsAndValidate(
+            TEST_DB,
+            3,
+            true,
+            ComixMigrations.MIGRATION_1_2,
+            ComixMigrations.MIGRATION_2_3
+        )
+
+        val comicCursor = dbV3.query("SELECT comic_key, title, library_id FROM comics WHERE comic_key = 'local:comic1'")
+        assertTrue(comicCursor.moveToFirst())
+        assertEquals("local:comic1", comicCursor.getString(0))
+        assertEquals("Amazing Spider-Man #1", comicCursor.getString(1))
+        assertEquals("comics", comicCursor.getString(2))
+        comicCursor.close()
+
+        val libraryCursor = dbV3.query("SELECT COUNT(*) FROM libraries")
+        assertTrue(libraryCursor.moveToFirst())
+        assertEquals(2, libraryCursor.getInt(0))
+        libraryCursor.close()
+
+        dbV3.close()
+    }
 }

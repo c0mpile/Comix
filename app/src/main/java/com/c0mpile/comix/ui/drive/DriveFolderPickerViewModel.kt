@@ -1,12 +1,16 @@
 package com.c0mpile.comix.ui.drive
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.toRoute
 import com.c0mpile.comix.data.archive.NaturalOrderComparator
 import com.c0mpile.comix.data.remote.drive.DriveApiException
 import com.c0mpile.comix.domain.model.ComicError
+import com.c0mpile.comix.domain.model.ComicLibrary
 import com.c0mpile.comix.domain.usecase.AddDriveFolderUseCase
 import com.c0mpile.comix.domain.usecase.BrowseDriveFoldersUseCase
+import com.c0mpile.comix.ui.navigation.DriveFolderPickerRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,8 +26,15 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class DriveFolderPickerViewModel @Inject constructor(
     private val browseDriveFoldersUseCase: BrowseDriveFoldersUseCase,
-    private val addDriveFolderUseCase: AddDriveFolderUseCase
+    private val addDriveFolderUseCase: AddDriveFolderUseCase,
+    savedStateHandle: SavedStateHandle = SavedStateHandle()
 ) : ViewModel() {
+
+    private val targetLibraryId: String = try {
+        savedStateHandle.toRoute<DriveFolderPickerRoute>().libraryId
+    } catch (_: Exception) {
+        savedStateHandle.get<String>("libraryId") ?: ComicLibrary.DEFAULT_COMICS_ID
+    }
 
     private val _uiState = MutableStateFlow(DriveFolderPickerUiState())
     val uiState: StateFlow<DriveFolderPickerUiState> = _uiState.asStateFlow()
@@ -71,7 +82,8 @@ class DriveFolderPickerViewModel @Inject constructor(
                     val result = addDriveFolderUseCase(
                         folderId = current.folderId,
                         displayName = current.displayName,
-                        driveId = current.driveId
+                        driveId = current.driveId,
+                        libraryId = targetLibraryId
                     )
                     result.onSuccess {
                         _uiState.update {

@@ -11,5 +11,10 @@ import kotlinx.coroutines.flow.Flow
 class ObserveLibraryComicsUseCase @Inject constructor(
     private val libraryRepository: LibraryRepository
 ) {
-    operator fun invoke(): Flow<List<Comic>> = libraryRepository.observeComics()
+    operator fun invoke(libraryId: String? = null): Flow<List<Comic>> =
+        if (libraryId != null) {
+            libraryRepository.observeComicsByLibrary(libraryId)
+        } else {
+            libraryRepository.observeComics()
+        }
 }

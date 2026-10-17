@@ -10,6 +10,10 @@ import javax.inject.Inject
 class RescanLibraryUseCase @Inject constructor(
     private val libraryRepository: LibraryRepository
 ) {
-    suspend operator fun invoke(): Result<ScanResult> =
-        libraryRepository.rescanAllFolders()
+    suspend operator fun invoke(libraryId: String? = null): Result<ScanResult> =
+        if (libraryId != null) {
+            libraryRepository.rescanLibraryFolders(libraryId)
+        } else {
+            libraryRepository.rescanAllFolders()
+        }
 }

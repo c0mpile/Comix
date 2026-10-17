@@ -11,5 +11,10 @@ import kotlinx.coroutines.flow.Flow
 class ObserveLibraryFoldersUseCase @Inject constructor(
     private val libraryRepository: LibraryRepository
 ) {
-    operator fun invoke(): Flow<List<LibraryFolder>> = libraryRepository.observeFolders()
+    operator fun invoke(libraryId: String? = null): Flow<List<LibraryFolder>> =
+        if (libraryId != null) {
+            libraryRepository.observeFoldersByLibrary(libraryId)
+        } else {
+            libraryRepository.observeFolders()
+        }
 }

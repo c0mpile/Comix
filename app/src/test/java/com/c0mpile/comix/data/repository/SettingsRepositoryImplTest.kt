@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import app.cash.turbine.test
 import com.c0mpile.comix.domain.model.AppThemeMode
+import com.c0mpile.comix.domain.model.LibraryLayoutMode
 import com.c0mpile.comix.domain.model.LibrarySortOrder
 import com.c0mpile.comix.domain.model.ReaderScaleMode
 import com.c0mpile.comix.domain.model.ReadingDirection
@@ -56,7 +57,9 @@ class SettingsRepositoryImplTest {
                 readingDirection = ReadingDirection.LEFT_TO_RIGHT,
                 readerScaleMode = ReaderScaleMode.FIT_SCREEN,
                 keepScreenOn = true,
-                librarySortOrder = LibrarySortOrder.TITLE_ASC
+                librarySortOrder = LibrarySortOrder.TITLE_ASC,
+                activeLibraryId = "comics",
+                libraryLayoutMode = LibraryLayoutMode.GRID
             )
             assertEquals(expected, initial)
             cancelAndIgnoreRemainingEvents()
@@ -160,6 +163,7 @@ class SettingsRepositoryImplTest {
             preferences[SettingsRepositoryImpl.KEY_READING_DIRECTION] = "INVALID_DIRECTION"
             preferences[SettingsRepositoryImpl.KEY_READER_SCALE_MODE] = "INVALID_SCALE"
             preferences[SettingsRepositoryImpl.KEY_LIBRARY_SORT_ORDER] = "INVALID_SORT"
+            preferences[SettingsRepositoryImpl.KEY_LIBRARY_LAYOUT_MODE] = "INVALID_LAYOUT"
         }
 
         repository.observeUserSettings().test {
@@ -169,6 +173,7 @@ class SettingsRepositoryImplTest {
             assertEquals(ReaderScaleMode.FIT_SCREEN, settings.readerScaleMode)
             assertEquals(LibrarySortOrder.TITLE_ASC, settings.librarySortOrder)
             assertEquals(true, settings.keepScreenOn)
+            assertEquals(LibraryLayoutMode.GRID, settings.libraryLayoutMode)
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -202,6 +207,40 @@ class SettingsRepositoryImplTest {
             val error = awaitError()
             assertTrue(error is IllegalStateException)
             assertEquals("Fatal preference corruption", error.message)
+        }
+    }
+
+    @Test
+    fun setActiveLibraryIdPersistsAndEmitsUpdatedActiveLibraryId() = runTest {
+        val (repository, _) = createTestRepository()
+
+        repository.observeUserSettings().test {
+            assertEquals("comics", awaitItem().activeLibraryId)
+
+            repository.setActiveLibraryId("manga")
+            assertEquals("manga", awaitItem().activeLibraryId)
+
+            repository.setActiveLibraryId("custom_lib_123")
+            assertEquals("custom_lib_123", awaitItem().activeLibraryId)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun setLibraryLayoutModePersistsAndEmitsUpdatedLayoutMode() = runTest {
+        val (repository, _) = createTestRepository()
+
+        repository.observeUserSettings().test {
+            assertEquals(LibraryLayoutMode.GRID, awaitItem().libraryLayoutMode)
+
+            repository.setLibraryLayoutMode(LibraryLayoutMode.LIST)
+            assertEquals(LibraryLayoutMode.LIST, awaitItem().libraryLayoutMode)
+
+            repository.setLibraryLayoutMode(LibraryLayoutMode.GRID)
+            assertEquals(LibraryLayoutMode.GRID, awaitItem().libraryLayoutMode)
+
+            cancelAndIgnoreRemainingEvents()
         }
     }
 }

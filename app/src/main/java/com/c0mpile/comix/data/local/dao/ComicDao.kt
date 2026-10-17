@@ -18,6 +18,10 @@ interface ComicDao {
     fun observeAllComicsWithProgress(): Flow<List<ComicWithProgressProjection>>
 
     @Transaction
+    @Query("SELECT * FROM comics WHERE library_id = :libraryId ORDER BY title COLLATE NOCASE ASC")
+    fun observeComicsWithProgressByLibrary(libraryId: String): Flow<List<ComicWithProgressProjection>>
+
+    @Transaction
     @Query("SELECT * FROM comics WHERE comic_key = :comicKey LIMIT 1")
     suspend fun getComicWithProgress(comicKey: String): ComicWithProgressProjection?
 
@@ -59,4 +63,7 @@ interface ComicDao {
 
     @Query("DELETE FROM comics WHERE source_type IN ('GOOGLE_DRIVE', 'DRIVE')")
     suspend fun deleteAllDriveComics()
+
+    @Query("DELETE FROM comics WHERE library_id = :libraryId")
+    suspend fun deleteComicsByLibrary(libraryId: String)
 }

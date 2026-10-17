@@ -6,22 +6,32 @@ import com.c0mpile.comix.domain.model.Comic
 import com.c0mpile.comix.domain.model.ComicAvailability
 import com.c0mpile.comix.domain.model.ComicError
 import com.c0mpile.comix.domain.model.ComicFormat
+import com.c0mpile.comix.domain.model.ComicLibrary
 import com.c0mpile.comix.domain.model.ComicSourceType
 import com.c0mpile.comix.domain.model.DriveFolder
+import com.c0mpile.comix.domain.model.LibraryFilterTab
 import com.c0mpile.comix.domain.model.LibraryFolder
+import com.c0mpile.comix.domain.model.LibraryLayoutMode
 import com.c0mpile.comix.domain.model.LibrarySortOrder
+import com.c0mpile.comix.domain.model.ReadingDirection
 import com.c0mpile.comix.domain.model.ReadingProgress
 import com.c0mpile.comix.domain.model.ScanResult
 import com.c0mpile.comix.domain.model.UserSettings
 import com.c0mpile.comix.domain.usecase.AddLibraryFolderUseCase
+import com.c0mpile.comix.domain.usecase.CreateLibraryUseCase
+import com.c0mpile.comix.domain.usecase.DeleteLibraryUseCase
 import com.c0mpile.comix.domain.usecase.ObserveDriveFoldersUseCase
+import com.c0mpile.comix.domain.usecase.ObserveLibrariesUseCase
 import com.c0mpile.comix.domain.usecase.ObserveLibraryComicsUseCase
 import com.c0mpile.comix.domain.usecase.ObserveLibraryFoldersUseCase
 import com.c0mpile.comix.domain.usecase.ObserveUserSettingsUseCase
 import com.c0mpile.comix.domain.usecase.RemoveLibraryFolderUseCase
 import com.c0mpile.comix.domain.usecase.RescanDriveUseCase
 import com.c0mpile.comix.domain.usecase.RescanLibraryUseCase
+import com.c0mpile.comix.domain.usecase.UpdateActiveLibraryUseCase
+import com.c0mpile.comix.domain.usecase.UpdateLibraryLayoutModeUseCase
 import com.c0mpile.comix.domain.usecase.UpdateLibrarySortOrderUseCase
+import com.c0mpile.comix.domain.usecase.UpdateLibraryUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -57,11 +67,34 @@ class LibraryViewModelTest {
     private val removeLibraryFolderUseCase = mockk<RemoveLibraryFolderUseCase>()
     private val observeUserSettingsUseCase = mockk<ObserveUserSettingsUseCase>()
     private val updateLibrarySortOrderUseCase = mockk<UpdateLibrarySortOrderUseCase>()
+    private val observeLibrariesUseCase = mockk<ObserveLibrariesUseCase>()
+    private val createLibraryUseCase = mockk<CreateLibraryUseCase>()
+    private val updateLibraryUseCase = mockk<UpdateLibraryUseCase>()
+    private val deleteLibraryUseCase = mockk<DeleteLibraryUseCase>()
+    private val updateActiveLibraryUseCase = mockk<UpdateActiveLibraryUseCase>()
+    private val updateLibraryLayoutModeUseCase = mockk<UpdateLibraryLayoutModeUseCase>()
 
     private val comicsFlow = MutableStateFlow<List<Comic>>(emptyList())
     private val foldersFlow = MutableStateFlow<List<LibraryFolder>>(emptyList())
     private val driveFoldersFlow = MutableStateFlow<List<DriveFolder>>(emptyList())
     private val userSettingsFlow = MutableStateFlow(UserSettings())
+    private val defaultLibraries = listOf(
+        ComicLibrary(
+            libraryId = ComicLibrary.DEFAULT_COMICS_ID,
+            name = "Comics",
+            defaultReadingDirection = ReadingDirection.LEFT_TO_RIGHT,
+            createdAtEpochMillis = 1000L,
+            isBuiltIn = true
+        ),
+        ComicLibrary(
+            libraryId = "manga",
+            name = "Manga",
+            defaultReadingDirection = ReadingDirection.RIGHT_TO_LEFT,
+            createdAtEpochMillis = 2000L,
+            isBuiltIn = false
+        )
+    )
+    private val librariesFlow = MutableStateFlow(defaultLibraries)
 
     private val testDispatcher = StandardTestDispatcher()
 
@@ -70,12 +103,21 @@ class LibraryViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
-        every { observeLibraryComicsUseCase() } returns comicsFlow
-        every { observeLibraryFoldersUseCase() } returns foldersFlow
-        every { observeDriveFoldersUseCase() } returns driveFoldersFlow
+        every { observeLibrariesUseCase() } returns librariesFlow
+        every { observeLibraryComicsUseCase(any()) } returns comicsFlow
+        every { observeLibraryFoldersUseCase(any()) } returns foldersFlow
+        every { observeDriveFoldersUseCase(any()) } returns driveFoldersFlow
         every { observeUserSettingsUseCase() } returns userSettingsFlow
         coEvery { updateLibrarySortOrderUseCase(any()) } returns Unit
-        coEvery { rescanDriveUseCase() } returns Result.success(ScanResult(0, 0, 0, emptyList()))
+        coEvery { rescanLibraryUseCase(any()) } returns Result.success(ScanResult(0, 0, 0, emptyList()))
+        coEvery { rescanDriveUseCase(any()) } returns Result.success(ScanResult(0, 0, 0, emptyList()))
+        coEvery { updateActiveLibraryUseCase(any()) } returns Unit
+        coEvery { createLibraryUseCase(any(), any()) } returns Result.success(
+            ComicLibrary("lib_new", "New Lib", ReadingDirection.LEFT_TO_RIGHT, 3000L, false)
+        )
+        coEvery { updateLibraryUseCase(any(), any(), any()) } returns Result.success(Unit)
+        coEvery { deleteLibraryUseCase(any()) } returns Result.success(Unit)
+        coEvery { updateLibraryLayoutModeUseCase(any()) } returns Unit
 
         viewModel = LibraryViewModel(
             observeLibraryComicsUseCase = observeLibraryComicsUseCase,
@@ -86,7 +128,13 @@ class LibraryViewModelTest {
             rescanDriveUseCase = rescanDriveUseCase,
             removeLibraryFolderUseCase = removeLibraryFolderUseCase,
             observeUserSettingsUseCase = observeUserSettingsUseCase,
-            updateLibrarySortOrderUseCase = updateLibrarySortOrderUseCase
+            updateLibrarySortOrderUseCase = updateLibrarySortOrderUseCase,
+            observeLibrariesUseCase = observeLibrariesUseCase,
+            createLibraryUseCase = createLibraryUseCase,
+            updateLibraryUseCase = updateLibraryUseCase,
+            deleteLibraryUseCase = deleteLibraryUseCase,
+            updateActiveLibraryUseCase = updateActiveLibraryUseCase,
+            updateLibraryLayoutModeUseCase = updateLibraryLayoutModeUseCase
         )
     }
 
@@ -170,7 +218,7 @@ class LibraryViewModelTest {
                 ComicError.EmptyArchive("empty.cbz")
             )
         )
-        coEvery { addLibraryFolderUseCase("content://tree/new") } returns Result.success(scanResult)
+        coEvery { addLibraryFolderUseCase("content://tree/new", any()) } returns Result.success(scanResult)
 
         viewModel.uiState.test {
             // Consume initial emission
@@ -180,7 +228,7 @@ class LibraryViewModelTest {
 
             testScheduler.advanceUntilIdle()
 
-            coVerify(exactly = 1) { addLibraryFolderUseCase("content://tree/new") }
+            coVerify(exactly = 1) { addLibraryFolderUseCase("content://tree/new", ComicLibrary.DEFAULT_COMICS_ID) }
 
             val latest = viewModel.uiState.value
             assertEquals(2, latest.scanFailureCount)
@@ -199,7 +247,7 @@ class LibraryViewModelTest {
             skippedCorruptCount = 0,
             errors = listOf(ComicError.PermissionRevoked("content://tree/revoked"))
         )
-        coEvery { addLibraryFolderUseCase("content://tree/revoked") } returns Result.success(scanResult)
+        coEvery { addLibraryFolderUseCase("content://tree/revoked", any()) } returns Result.success(scanResult)
 
         viewModel.uiState.test {
             awaitItem()
@@ -219,7 +267,7 @@ class LibraryViewModelTest {
     @Test
     fun folderPickedSetsActiveErrorOnUseCaseFailure() = runTest(testDispatcher) {
         coEvery {
-            addLibraryFolderUseCase("content://tree/fail")
+            addLibraryFolderUseCase("content://tree/fail", any())
         } returns Result.failure(IOException("Failed to read tree"))
 
         viewModel.uiState.test {
@@ -245,7 +293,7 @@ class LibraryViewModelTest {
             skippedCorruptCount = 1,
             errors = listOf(ComicError.CorruptArchive("broken.cbz", "Bad signature"))
         )
-        coEvery { rescanLibraryUseCase() } returns Result.success(scanResult)
+        coEvery { rescanLibraryUseCase(any()) } returns Result.success(scanResult)
 
         viewModel.uiState.test {
             awaitItem()
@@ -254,7 +302,7 @@ class LibraryViewModelTest {
 
             testScheduler.advanceUntilIdle()
 
-            coVerify(exactly = 1) { rescanLibraryUseCase() }
+            coVerify(exactly = 1) { rescanLibraryUseCase(ComicLibrary.DEFAULT_COMICS_ID) }
 
             val latest = viewModel.uiState.value
             assertEquals(1, latest.scanFailureCount)
@@ -278,7 +326,7 @@ class LibraryViewModelTest {
     @Test
     fun dismissErrorClearsActiveErrorAndScanFailureCount() = runTest(testDispatcher) {
         coEvery {
-            rescanLibraryUseCase()
+            rescanLibraryUseCase(any())
         } returns Result.failure(IOException("Transient IO failure"))
 
         viewModel.uiState.test {
@@ -504,8 +552,8 @@ class LibraryViewModelTest {
     fun rescanRequestedWithDriveFoldersExecutesBothLocalAndDriveRescan() = runTest(testDispatcher) {
         val testDriveFolder = DriveFolder("drive_1", "Drive Manga", 1000L, null)
         driveFoldersFlow.value = listOf(testDriveFolder)
-        coEvery { rescanLibraryUseCase() } returns Result.success(ScanResult(addedOrUpdatedCount = 1, removedCount = 0, skippedCorruptCount = 0, errors = emptyList()))
-        coEvery { rescanDriveUseCase() } returns Result.success(ScanResult(addedOrUpdatedCount = 2, removedCount = 0, skippedCorruptCount = 0, errors = emptyList()))
+        coEvery { rescanLibraryUseCase(any()) } returns Result.success(ScanResult(addedOrUpdatedCount = 1, removedCount = 0, skippedCorruptCount = 0, errors = emptyList()))
+        coEvery { rescanDriveUseCase(any()) } returns Result.success(ScanResult(addedOrUpdatedCount = 2, removedCount = 0, skippedCorruptCount = 0, errors = emptyList()))
 
         viewModel.uiState.test {
             var state = awaitItem()
@@ -516,8 +564,8 @@ class LibraryViewModelTest {
             viewModel.onEvent(LibraryUiEvent.RescanRequested)
             testScheduler.advanceUntilIdle()
 
-            coVerify(exactly = 1) { rescanLibraryUseCase() }
-            coVerify(exactly = 1) { rescanDriveUseCase() }
+            coVerify(exactly = 1) { rescanLibraryUseCase(ComicLibrary.DEFAULT_COMICS_ID) }
+            coVerify(exactly = 1) { rescanDriveUseCase(ComicLibrary.DEFAULT_COMICS_ID) }
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -529,8 +577,8 @@ class LibraryViewModelTest {
         comicsFlow.value = listOf(testComic)
         driveFoldersFlow.value = listOf(testDriveFolder)
 
-        coEvery { rescanLibraryUseCase() } returns Result.success(ScanResult(0, 0, 0, emptyList()))
-        coEvery { rescanDriveUseCase() } returns Result.failure(DriveApiException(ComicError.AuthExpired))
+        coEvery { rescanLibraryUseCase(any()) } returns Result.success(ScanResult(0, 0, 0, emptyList()))
+        coEvery { rescanDriveUseCase(any()) } returns Result.failure(DriveApiException(ComicError.AuthExpired))
 
         viewModel.uiState.test {
             var state = awaitItem()
@@ -544,6 +592,155 @@ class LibraryViewModelTest {
             val errorState = viewModel.uiState.value
             assertEquals(ComicError.AuthExpired, errorState.activeError)
             assertEquals(1, errorState.comics.size)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun filterTabSelectedFiltersComicsByInProgressAndFinished() = runTest(testDispatcher) {
+        val unreadComic = createTestComic("c1", "Unread Comic", progress = null)
+        val inProgressComic = createTestComic(
+            "c2",
+            "Reading Comic",
+            progress = ReadingProgress("c2", currentPage = 5, pageCount = 20, isFinished = false, updatedAtEpochMillis = 1000L)
+        )
+        val finishedComic = createTestComic(
+            "c3",
+            "Finished Comic",
+            progress = ReadingProgress("c3", currentPage = 20, pageCount = 20, isFinished = true, updatedAtEpochMillis = 1000L)
+        )
+        comicsFlow.value = listOf(unreadComic, inProgressComic, finishedComic)
+        foldersFlow.value = listOf(createTestFolder("content://tree/f1", "Comics", true))
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            var state = viewModel.uiState.value
+            assertEquals(LibraryFilterTab.ALL, state.selectedFilterTab)
+            assertEquals(3, state.comics.size)
+            assertFalse(state.showEmptyFilterTabState)
+
+            // Switch to In Progress
+            viewModel.onEvent(LibraryUiEvent.FilterTabSelected(LibraryFilterTab.IN_PROGRESS))
+            testScheduler.advanceUntilIdle()
+
+            state = viewModel.uiState.value
+            assertEquals(LibraryFilterTab.IN_PROGRESS, state.selectedFilterTab)
+            assertEquals(1, state.comics.size)
+            assertEquals("c2", state.comics.first().comicKey)
+            assertFalse(state.showEmptyFilterTabState)
+
+            // Switch to Finished
+            viewModel.onEvent(LibraryUiEvent.FilterTabSelected(LibraryFilterTab.FINISHED))
+            testScheduler.advanceUntilIdle()
+
+            state = viewModel.uiState.value
+            assertEquals(LibraryFilterTab.FINISHED, state.selectedFilterTab)
+            assertEquals(1, state.comics.size)
+            assertEquals("c3", state.comics.first().comicKey)
+            assertFalse(state.showEmptyFilterTabState)
+
+            // Empty in progress tab scenario
+            comicsFlow.value = listOf(unreadComic, finishedComic)
+            viewModel.onEvent(LibraryUiEvent.FilterTabSelected(LibraryFilterTab.IN_PROGRESS))
+            testScheduler.advanceUntilIdle()
+
+            state = viewModel.uiState.value
+            assertTrue(state.comics.isEmpty())
+            assertTrue(state.showEmptyFilterTabState)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun librarySelectedUpdatesActiveLibraryId() = runTest(testDispatcher) {
+        viewModel.onEvent(LibraryUiEvent.LibrarySelected("manga"))
+        testScheduler.advanceUntilIdle()
+
+        coVerify(exactly = 1) { updateActiveLibraryUseCase("manga") }
+    }
+
+    @Test
+    fun createLibrarySubmittedCreatesAndSwitchesActiveLibrary() = runTest(testDispatcher) {
+        val createdLibrary = ComicLibrary("lib_novel", "Light Novels", ReadingDirection.RIGHT_TO_LEFT, 5000L, false)
+        coEvery { createLibraryUseCase("Light Novels", ReadingDirection.RIGHT_TO_LEFT) } returns Result.success(createdLibrary)
+
+        viewModel.onEvent(LibraryUiEvent.CreateLibrarySubmitted("Light Novels", ReadingDirection.RIGHT_TO_LEFT))
+        testScheduler.advanceUntilIdle()
+
+        coVerify(exactly = 1) { createLibraryUseCase("Light Novels", ReadingDirection.RIGHT_TO_LEFT) }
+        coVerify(exactly = 1) { updateActiveLibraryUseCase("lib_novel") }
+    }
+
+    @Test
+    fun updateLibrarySubmittedInvokesUpdateLibraryUseCase() = runTest(testDispatcher) {
+        viewModel.onEvent(LibraryUiEvent.UpdateLibrarySubmitted("comics", "Western Comics", ReadingDirection.LEFT_TO_RIGHT))
+        testScheduler.advanceUntilIdle()
+
+        coVerify(exactly = 1) { updateLibraryUseCase("comics", "Western Comics", ReadingDirection.LEFT_TO_RIGHT) }
+    }
+
+    @Test
+    fun deleteLibraryConfirmedDeletesAndSwitchesToRemainingLibrary() = runTest(testDispatcher) {
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            // Active library is DEFAULT_COMICS_ID ("comics")
+            viewModel.onEvent(LibraryUiEvent.DeleteLibraryConfirmed(ComicLibrary.DEFAULT_COMICS_ID))
+            testScheduler.advanceUntilIdle()
+
+            coVerify(exactly = 1) { deleteLibraryUseCase(ComicLibrary.DEFAULT_COMICS_ID) }
+            coVerify(exactly = 1) { updateActiveLibraryUseCase("manga") }
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun activeLibraryIdFallsBackToFirstLibraryWhenActiveLibraryDoesNotExist() = runTest(testDispatcher) {
+        userSettingsFlow.value = UserSettings(activeLibraryId = "non_existent_id")
+
+        viewModel.uiState.test {
+            var state = awaitItem()
+            while (state.isInitialLoading) {
+                state = awaitItem()
+            }
+
+            assertEquals(ComicLibrary.DEFAULT_COMICS_ID, state.activeLibraryId)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun toggleLayoutModeTogglesBetweenGridAndList() = runTest(testDispatcher) {
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            // Initial mode is GRID
+            assertEquals(LibraryLayoutMode.GRID, viewModel.uiState.value.layoutMode)
+
+            // Toggle from GRID to LIST
+            viewModel.onEvent(LibraryUiEvent.ToggleLayoutMode)
+            testScheduler.advanceUntilIdle()
+
+            coVerify(exactly = 1) { updateLibraryLayoutModeUseCase(LibraryLayoutMode.LIST) }
+
+            // Simulate settings update to LIST
+            userSettingsFlow.value = UserSettings(libraryLayoutMode = LibraryLayoutMode.LIST)
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(LibraryLayoutMode.LIST, viewModel.uiState.value.layoutMode)
+
+            // Toggle from LIST to GRID
+            viewModel.onEvent(LibraryUiEvent.ToggleLayoutMode)
+            testScheduler.advanceUntilIdle()
+
+            coVerify(exactly = 1) { updateLibraryLayoutModeUseCase(LibraryLayoutMode.GRID) }
+
             cancelAndIgnoreRemainingEvents()
         }
     }

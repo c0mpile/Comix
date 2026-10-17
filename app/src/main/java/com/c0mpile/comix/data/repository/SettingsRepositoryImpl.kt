@@ -7,6 +7,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.c0mpile.comix.domain.model.AppThemeMode
+import com.c0mpile.comix.domain.model.ComicLibrary
+import com.c0mpile.comix.domain.model.LibraryLayoutMode
 import com.c0mpile.comix.domain.model.LibrarySortOrder
 import com.c0mpile.comix.domain.model.ReaderScaleMode
 import com.c0mpile.comix.domain.model.ReadingDirection
@@ -72,6 +74,18 @@ class SettingsRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun setActiveLibraryId(libraryId: String) {
+        dataStore.edit { preferences ->
+            preferences[KEY_ACTIVE_LIBRARY_ID] = libraryId
+        }
+    }
+
+    override suspend fun setLibraryLayoutMode(layoutMode: LibraryLayoutMode) {
+        dataStore.edit { preferences ->
+            preferences[KEY_LIBRARY_LAYOUT_MODE] = layoutMode.name
+        }
+    }
+
     private fun mapToUserSettings(preferences: Preferences): UserSettings {
         val themeMode = preferences[KEY_THEME_MODE]?.let { raw ->
             AppThemeMode.entries.find { it.name == raw }
@@ -91,12 +105,21 @@ class SettingsRepositoryImpl @Inject constructor(
             LibrarySortOrder.entries.find { it.name == raw }
         } ?: LibrarySortOrder.TITLE_ASC
 
+        val activeLibraryId = preferences[KEY_ACTIVE_LIBRARY_ID]?.takeIf { it.isNotBlank() }
+            ?: ComicLibrary.DEFAULT_COMICS_ID
+
+        val libraryLayoutMode = preferences[KEY_LIBRARY_LAYOUT_MODE]?.let { raw ->
+            LibraryLayoutMode.entries.find { it.name == raw }
+        } ?: LibraryLayoutMode.GRID
+
         return UserSettings(
             themeMode = themeMode,
             readingDirection = readingDirection,
             readerScaleMode = readerScaleMode,
             keepScreenOn = keepScreenOn,
-            librarySortOrder = librarySortOrder
+            librarySortOrder = librarySortOrder,
+            activeLibraryId = activeLibraryId,
+            libraryLayoutMode = libraryLayoutMode
         )
     }
 
@@ -106,5 +129,7 @@ class SettingsRepositoryImpl @Inject constructor(
         val KEY_READER_SCALE_MODE = stringPreferencesKey("reader_scale_mode")
         val KEY_KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
         val KEY_LIBRARY_SORT_ORDER = stringPreferencesKey("library_sort_order")
+        val KEY_ACTIVE_LIBRARY_ID = stringPreferencesKey("active_library_id")
+        val KEY_LIBRARY_LAYOUT_MODE = stringPreferencesKey("library_layout_mode")
     }
 }

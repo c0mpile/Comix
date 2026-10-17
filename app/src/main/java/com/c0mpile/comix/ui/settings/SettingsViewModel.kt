@@ -106,7 +106,7 @@ class SettingsViewModel @Inject constructor(
 
             is SettingsUiEvent.FolderPicked -> {
                 viewModelScope.launch {
-                    addLibraryFolderUseCase(event.treeUri)
+                    addLibraryFolderUseCase(event.treeUri, uiState.value.userSettings.activeLibraryId)
                 }
             }
 

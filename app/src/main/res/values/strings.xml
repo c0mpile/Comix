@@ -51,6 +51,7 @@
     <string name="error_unknown">An unexpected error occurred</string>
 
     <string name="cover_content_description">Cover for %1$s</string>
+    <string name="cd_comic_cover">Cover for %1$s</string>
     <string name="cover_placeholder_description">Comic cover placeholder</string>
     <string name="page_count_single">1 page</string>
     <string name="page_count_plural">%1$d pages</string>
@@ -138,4 +139,35 @@
     <string name="error_oom_title">Out of memory</string>
     <string name="error_oom_message">Unable to allocate memory to display this page.</string>
     <string name="error_page_failed">Failed to load page %1$d</string>
+
+    <!-- Navigation Drawer & Multiple Libraries -->
+    <string name="action_open_drawer">Open navigation menu</string>
+    <string name="drawer_libraries_header">Libraries</string>
+    <string name="action_create_library">Create library</string>
+    <string name="action_edit_library">Edit %1$s</string>
+    <string name="library_direction_ltr_short">LTR</string>
+    <string name="library_direction_rtl_short">RTL</string>
+
+    <!-- Create / Edit Library Dialog -->
+    <string name="dialog_create_library_title">Create library</string>
+    <string name="dialog_edit_library_title">Edit library</string>
+    <string name="dialog_library_name_label">Library name</string>
+    <string name="dialog_library_direction_label">Default reading direction</string>
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_delete_library">Delete library</string>
+
+    <!-- Filter Tabs & Empty Tab States -->
+    <string name="tab_all">All</string>
+    <string name="tab_in_progress">In Progress</string>
+    <string name="tab_finished">Finished</string>
+    <string name="empty_in_progress_title">No comics in progress</string>
+    <string name="empty_in_progress_message">Start reading a comic in this library to see it here.</string>
+    <string name="empty_finished_title">No finished comics</string>
+    <string name="empty_finished_message">Comics you finish reading in this library will appear here.</string>
+    <string name="action_show_all_comics">Show all comics</string>
+
+    <!-- Library Layout Mode Toggle -->
+    <string name="action_switch_to_list_view">Switch to list view</string>
+    <string name="action_switch_to_grid_view">Switch to grid view</string>
 </resources>

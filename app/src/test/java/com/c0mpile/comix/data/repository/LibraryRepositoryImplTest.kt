@@ -6,9 +6,12 @@ import com.c0mpile.comix.data.archive.ComicArchiveReaderFactory
 import com.c0mpile.comix.data.archive.CorruptArchiveException
 import com.c0mpile.comix.data.archive.EmptyArchiveException
 import com.c0mpile.comix.data.local.dao.ComicDao
+import com.c0mpile.comix.data.local.dao.DriveFolderDao
+import com.c0mpile.comix.data.local.dao.LibraryDao
 import com.c0mpile.comix.data.local.dao.LibraryFolderDao
 import com.c0mpile.comix.data.local.entity.ComicEntity
 import com.c0mpile.comix.data.local.entity.ComicWithProgressProjection
+import com.c0mpile.comix.data.local.entity.LibraryEntity
 import com.c0mpile.comix.data.local.entity.LibraryFolderEntity
 import com.c0mpile.comix.data.local.entity.ReadingProgressEntity
 import com.c0mpile.comix.data.source.ComicKeyHasher
@@ -20,11 +23,14 @@ import com.c0mpile.comix.domain.model.ComicError
 import com.c0mpile.comix.domain.model.ComicFormat
 import com.c0mpile.comix.domain.model.ComicPage
 import com.c0mpile.comix.domain.model.ComicSourceType
+import com.c0mpile.comix.domain.model.ReadingDirection
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -43,6 +49,8 @@ class LibraryRepositoryImplTest {
 
     private val comicDao = mockk<ComicDao>(relaxed = true)
     private val libraryFolderDao = mockk<LibraryFolderDao>(relaxed = true)
+    private val libraryDao = mockk<LibraryDao>(relaxed = true)
+    private val driveFolderDao = mockk<DriveFolderDao>(relaxed = true)
     private val comicSource = mockk<ComicSource>()
     private val comicKeyHasher = mockk<ComicKeyHasher>()
     private val archiveReaderFactory = mockk<ComicArchiveReaderFactory>()
@@ -59,7 +67,9 @@ class LibraryRepositoryImplTest {
             comicSource = comicSource,
             comicKeyHasher = comicKeyHasher,
             archiveReaderFactory = archiveReaderFactory,
-            ioDispatcher = testDispatcher
+            ioDispatcher = testDispatcher,
+            libraryDao = libraryDao,
+            driveFolderDao = driveFolderDao
         )
     }
 
@@ -512,5 +522,94 @@ class LibraryRepositoryImplTest {
 
         coVerify(exactly = 1) { comicDao.deleteLocalComicsInFolder(folderUri) }
         coVerify(exactly = 1) { libraryFolderDao.deleteFolder(folderUri) }
+    }
+
+    @Test
+    fun observeLibrariesSeedsDefaultsWhenDatabaseIsEmpty() = runTest(testDispatcher) {
+        val emptyFlow = MutableStateFlow<List<LibraryEntity>>(emptyList())
+        every { libraryDao.observeLibraries() } returns emptyFlow
+        coEvery { libraryDao.getLibraries() } returns emptyList() andThen listOf(
+            LibraryEntity("comics", "Comics", ReadingDirection.LEFT_TO_RIGHT, 1000L, true),
+            LibraryEntity("manga", "Manga", ReadingDirection.RIGHT_TO_LEFT, 1001L, true)
+        )
+        coEvery { libraryDao.upsertLibraries(any()) } returns Unit
+
+        val emitted = repository.observeLibraries().first()
+        assertEquals(2, emitted.size)
+        assertEquals("comics", emitted[0].libraryId)
+        assertEquals("manga", emitted[1].libraryId)
+        coVerify(exactly = 1) { libraryDao.upsertLibraries(any()) }
+    }
+
+    @Test
+    fun getLibraryReturnsDomainLibrary() = runTest(testDispatcher) {
+        coEvery { libraryDao.getLibraries() } returns listOf(
+            LibraryEntity("comics", "Comics", ReadingDirection.LEFT_TO_RIGHT, 1000L, true)
+        )
+        coEvery { libraryDao.getLibrary("comics") } returns LibraryEntity(
+            "comics", "Comics", ReadingDirection.LEFT_TO_RIGHT, 1000L, true
+        )
+
+        val lib = repository.getLibrary("comics")
+        assertNotNull(lib)
+        assertEquals("comics", lib?.libraryId)
+        assertEquals(ReadingDirection.LEFT_TO_RIGHT, lib?.defaultReadingDirection)
+    }
+
+    @Test
+    fun createLibraryTrimsNameAndGeneratesId() = runTest(testDispatcher) {
+        coEvery { libraryDao.upsertLibrary(any()) } returns Unit
+
+        val result = repository.createLibrary("  Webtoons  ", ReadingDirection.LEFT_TO_RIGHT)
+        assertTrue(result.isSuccess)
+        val lib = result.getOrThrow()
+        assertEquals("Webtoons", lib.name)
+        assertTrue(lib.libraryId.startsWith("webtoons_"))
+        assertEquals(ReadingDirection.LEFT_TO_RIGHT, lib.defaultReadingDirection)
+        assertFalse(lib.isBuiltIn)
+
+        val blankResult = repository.createLibrary("   ", ReadingDirection.LEFT_TO_RIGHT)
+        assertTrue(blankResult.isFailure)
+    }
+
+    @Test
+    fun updateLibraryUpdatesExistingLibrary() = runTest(testDispatcher) {
+        coEvery { libraryDao.getLibrary("custom_1") } returns LibraryEntity(
+            "custom_1", "Old Name", ReadingDirection.LEFT_TO_RIGHT, 1000L, false
+        )
+        coEvery { libraryDao.upsertLibrary(any()) } returns Unit
+
+        val result = repository.updateLibrary("custom_1", "New Name", ReadingDirection.RIGHT_TO_LEFT)
+        assertTrue(result.isSuccess)
+        coVerify {
+            libraryDao.upsertLibrary(match {
+                it.libraryId == "custom_1" && it.name == "New Name" && it.defaultReadingDirection == ReadingDirection.RIGHT_TO_LEFT
+            })
+        }
+    }
+
+    @Test
+    fun deleteLibraryRejectsLastRemainingLibraryAndDeletesWhenMultiple() = runTest(testDispatcher) {
+        coEvery { libraryDao.getLibraries() } returns listOf(
+            LibraryEntity("comics", "Comics", ReadingDirection.LEFT_TO_RIGHT, 1000L, true)
+        )
+        val singleLibResult = repository.deleteLibrary("comics")
+        assertTrue(singleLibResult.isFailure)
+
+        coEvery { libraryDao.getLibraries() } returns listOf(
+            LibraryEntity("comics", "Comics", ReadingDirection.LEFT_TO_RIGHT, 1000L, true),
+            LibraryEntity("manga", "Manga", ReadingDirection.RIGHT_TO_LEFT, 1001L, true)
+        )
+        coEvery { comicDao.deleteComicsByLibrary("manga") } returns Unit
+        coEvery { libraryFolderDao.deleteFoldersByLibrary("manga") } returns Unit
+        coEvery { driveFolderDao.deleteFoldersByLibrary("manga") } returns Unit
+        coEvery { libraryDao.deleteLibrary("manga") } returns Unit
+
+        val deleteResult = repository.deleteLibrary("manga")
+        assertTrue(deleteResult.isSuccess)
+        coVerify { comicDao.deleteComicsByLibrary("manga") }
+        coVerify { libraryFolderDao.deleteFoldersByLibrary("manga") }
+        coVerify { driveFolderDao.deleteFoldersByLibrary("manga") }
+        coVerify { libraryDao.deleteLibrary("manga") }
     }
 }

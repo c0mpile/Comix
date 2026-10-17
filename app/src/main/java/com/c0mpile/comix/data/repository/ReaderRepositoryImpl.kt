@@ -204,7 +204,8 @@ class ReaderRepositoryImpl @Inject constructor(
         driveFileId = comic.driveFileId,
         driveMd5 = comic.driveMd5,
         coverCachePath = comic.coverCachePath,
-        progress = progress?.toDomain()
+        progress = progress?.toDomain(),
+        libraryId = comic.libraryId
     )
 
     private fun ReadingProgressEntity.toDomain(): ReadingProgress = ReadingProgress(
