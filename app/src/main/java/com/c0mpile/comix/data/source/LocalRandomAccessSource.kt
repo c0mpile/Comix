@@ -66,6 +66,23 @@ class LocalRandomAccessSource(
         return channel.read(byteBuffer, offset)
     }
 
+    /**
+     * Duplicates the underlying seekable [ParcelFileDescriptor] for consumers that require
+     * direct descriptor access (such as [android.graphics.pdf.PdfRenderer]).
+     *
+     * The returned descriptor is independent and must be closed by the caller.
+     */
+    fun duplicateParcelFileDescriptor(): ParcelFileDescriptor? {
+        if (isClosed.get()) {
+            throw IOException("RandomAccessSource is closed")
+        }
+        return when {
+            pfd != null -> pfd.dup()
+            tempFile != null -> ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)
+            else -> null
+        }
+    }
+
     override fun close() {
         if (isClosed.compareAndSet(false, true)) {
             try {

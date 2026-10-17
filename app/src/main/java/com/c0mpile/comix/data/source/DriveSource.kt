@@ -50,7 +50,7 @@ class DriveSource @Inject constructor(
                 folderUri = folderUri,
                 fileName = file.name,
                 title = file.name.substringBeforeLast('.'),
-                format = ComicFormat.CBZ,
+                format = detectSupportedFormat(file.name, file.md5Checksum) ?: ComicFormat.CBZ,
                 sizeBytes = file.size ?: 0L,
                 lastModifiedEpochMillis = parseModifiedTime(file.modifiedTime)
             )
@@ -62,7 +62,7 @@ class DriveSource @Inject constructor(
     }
 
     /**
-     * Recursively traverses [rootFolderId] using breadth-first search to find all non-trashed CBZ comic files,
+     * Recursively traverses [rootFolderId] using breadth-first search to find all non-trashed comic files,
      * following folder shortcuts while preventing cycles.
      */
     suspend fun scanDriveFiles(rootFolderId: String): List<DriveFile> = withContext(ioDispatcher) {
@@ -105,7 +105,7 @@ class DriveSource @Inject constructor(
                                         try {
                                             val resolvedTarget = apiClient.getFile(targetId)
                                             if (!resolvedTarget.trashed &&
-                                                isSupportedCbz(resolvedTarget.name, resolvedTarget.md5Checksum)
+                                                isSupportedComicFile(resolvedTarget.name, resolvedTarget.md5Checksum)
                                             ) {
                                                 discoveredFiles.add(resolvedTarget)
                                             }
@@ -118,7 +118,7 @@ class DriveSource @Inject constructor(
                         }
 
                         else -> {
-                            if (isSupportedCbz(file.name, file.md5Checksum)) {
+                            if (isSupportedComicFile(file.name, file.md5Checksum)) {
                                 if (visitedFileIds.add(file.id)) {
                                     discoveredFiles.add(file)
                                 }
@@ -136,6 +136,19 @@ class DriveSource @Inject constructor(
     companion object {
         const val ROOT_FOLDER_ID: String = "root"
         const val MY_DRIVE_DISPLAY_NAME: String = "My Drive"
+
+        fun detectSupportedFormat(name: String, md5Checksum: String?): ComicFormat? {
+            if (name.startsWith(".") || md5Checksum.isNullOrBlank()) return null
+            return when {
+                name.endsWith(".cbz", ignoreCase = true) -> ComicFormat.CBZ
+                name.endsWith(".pdf", ignoreCase = true) -> ComicFormat.PDF
+                else -> null
+            }
+        }
+
+        fun isSupportedComicFile(name: String, md5Checksum: String?): Boolean {
+            return detectSupportedFormat(name, md5Checksum) != null
+        }
 
         fun isSupportedCbz(name: String, md5Checksum: String?): Boolean {
             return name.endsWith(".cbz", ignoreCase = true) &&

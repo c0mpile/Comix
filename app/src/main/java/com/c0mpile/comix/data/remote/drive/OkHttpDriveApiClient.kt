@@ -62,7 +62,7 @@ class OkHttpDriveApiClient(
         val escapedParent = escapeQuery(parentId)
         val query = "'$escapedParent' in parents and trashed = false and " +
                 "(mimeType = '$MIME_TYPE_FOLDER' or mimeType = '$MIME_TYPE_SHORTCUT' or " +
-                "name contains '.cbz' or name contains '.CBZ')"
+                "name contains '.cbz' or name contains '.CBZ' or name contains '.pdf' or name contains '.PDF')"
 
         return executeAndDecode { urlBuilder ->
             urlBuilder.addPathSegment("files")

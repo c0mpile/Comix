@@ -59,7 +59,24 @@ class CoverExtractor @Inject constructor(
             }
 
             val source = randomAccessSourceFactory.openLocal(localUri)
-            val reader = archiveReaderFactory.create(source, ComicFormat.CBZ)
+            val detectedFormat = comicDao.getComicWithProgress(comicKey)?.comic?.format
+                ?: if (localUri.endsWith(".pdf", ignoreCase = true)) {
+                    ComicFormat.PDF
+                } else {
+                    val header = ByteArray(8)
+                    val read = try {
+                        source.readAt(0L, header, 0, 8)
+                    } catch (_: Exception) {
+                        -1
+                    }
+                    if (read >= 5 && header.take(5).toByteArray().contentEquals(PDF_SIGNATURE_BYTES)) {
+                        ComicFormat.PDF
+                    } else {
+                        ComicFormat.CBZ
+                    }
+                }
+
+            val reader = archiveReaderFactory.create(source, detectedFormat)
             val page0Bytes = reader.use { r ->
                 val pages = r.getPages()
                 if (pages.isEmpty()) {
@@ -127,5 +144,12 @@ class CoverExtractor @Inject constructor(
     companion object {
         private const val TARGET_COVER_WIDTH_PX = 400
         private const val TARGET_COVER_HEIGHT_PX = 600
+        private val PDF_SIGNATURE_BYTES = byteArrayOf(
+            0x25.toByte(), // %
+            0x50.toByte(), // P
+            0x44.toByte(), // D
+            0x46.toByte(), // F
+            0x2D.toByte()  // -
+        )
     }
 }

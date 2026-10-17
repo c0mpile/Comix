@@ -267,4 +267,53 @@ class DriveSourceTest {
         assertEquals(1704067200000L, discovered.lastModifiedEpochMillis)
         assertEquals(ComicSourceType.GOOGLE_DRIVE, driveSource.sourceType)
     }
+
+    @Test
+    fun detectSupportedFormatIdentifiesCbzAndPdf() {
+        assertEquals(ComicFormat.CBZ, DriveSource.detectSupportedFormat("comic.cbz", "md5"))
+        assertEquals(ComicFormat.CBZ, DriveSource.detectSupportedFormat("comic.CBZ", "md5"))
+        assertEquals(ComicFormat.PDF, DriveSource.detectSupportedFormat("comic.pdf", "md5"))
+        assertEquals(ComicFormat.PDF, DriveSource.detectSupportedFormat("comic.PDF", "md5"))
+
+        assertEquals(null, DriveSource.detectSupportedFormat("comic.cbr", "md5"))
+        assertEquals(null, DriveSource.detectSupportedFormat(".hidden.pdf", "md5"))
+        assertEquals(null, DriveSource.detectSupportedFormat("comic.pdf", null))
+        assertEquals(null, DriveSource.detectSupportedFormat("comic.pdf", ""))
+    }
+
+    @Test
+    fun scanDriveFilesDiscoversBothCbzAndPdfFiles() = runTest(testDispatcher) {
+        val cbzFile = createDriveFile("1", "comic.cbz")
+        val pdfFile = createDriveFile("2", "graphic_novel.pdf")
+        val cbrFile = createDriveFile("3", "unsupported.cbr")
+
+        coEvery { apiClient.listChildren("root-id", null) } returns DriveFileList(
+            files = listOf(cbzFile, pdfFile, cbrFile),
+            nextPageToken = null
+        )
+
+        val discovered = driveSource.scanDriveFiles("root-id")
+
+        assertEquals(2, discovered.size)
+        assertEquals(listOf("1", "2"), discovered.map { it.id })
+    }
+
+    @Test
+    fun listComicFilesMapsPdfFilesCorrectly() = runTest(testDispatcher) {
+        val pdfFile = createDriveFile(
+            id = "pdf-1",
+            name = "Saga Chapter 1.pdf",
+            md5Checksum = "saga-md5"
+        )
+        coEvery { apiClient.listChildren("folder-id", null) } returns DriveFileList(
+            files = listOf(pdfFile),
+            nextPageToken = null
+        )
+
+        val discoveredList = driveSource.listComicFiles("folder-id")
+
+        assertEquals(1, discoveredList.size)
+        assertEquals(ComicFormat.PDF, discoveredList[0].format)
+        assertEquals("Saga Chapter 1", discoveredList[0].title)
+    }
 }
