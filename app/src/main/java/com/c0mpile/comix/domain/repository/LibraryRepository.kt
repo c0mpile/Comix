@@ -1,10 +1,12 @@
 package com.c0mpile.comix.domain.repository
 
+import com.c0mpile.comix.domain.model.BulkComicMetadataUpdate
 import com.c0mpile.comix.domain.model.Comic
 import com.c0mpile.comix.domain.model.ComicLibrary
 import com.c0mpile.comix.domain.model.LibraryFolder
 import com.c0mpile.comix.domain.model.ReadingDirection
 import com.c0mpile.comix.domain.model.ScanResult
+import com.c0mpile.comix.domain.model.SingleComicMetadataUpdate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
@@ -35,4 +37,6 @@ interface LibraryRepository {
     suspend fun rescanAllFolders(): Result<ScanResult>
     suspend fun rescanLibraryFolders(libraryId: String): Result<ScanResult> = rescanAllFolders()
     suspend fun removeFolder(folderUri: String)
+    suspend fun updateComicMetadata(update: SingleComicMetadataUpdate): Result<Unit> = Result.success(Unit)
+    suspend fun bulkUpdateComicMetadata(update: BulkComicMetadataUpdate): Result<Unit> = Result.success(Unit)
 }
