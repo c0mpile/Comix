@@ -104,7 +104,7 @@ class LibraryViewModel @Inject constructor(
             val revoked = folders.filter { !it.hasPersistedPermission }
 
             val tabFilteredComics = when (filter.selectedFilterTab) {
-                LibraryFilterTab.ALL -> rawComics
+                LibraryFilterTab.ALL, LibraryFilterTab.SERIES -> rawComics
                 LibraryFilterTab.IN_PROGRESS -> rawComics.filter { it.progress != null && !it.progress.isFinished }
                 LibraryFilterTab.FINISHED -> rawComics.filter { it.progress?.isFinished == true }
             }
