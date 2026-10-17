@@ -2,6 +2,8 @@ package com.c0mpile.comix.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -60,7 +62,7 @@ class DriveFolderPickerScreenTest {
         }
 
         // Top bar breadcrumb title
-        composeTestRule.onNodeWithText("My Drive").assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("My Drive").onFirst().assertIsDisplayed()
 
         // Subfolder list items
         composeTestRule.onNodeWithText("Comics Folder").assertIsDisplayed()
