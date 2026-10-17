@@ -5,6 +5,7 @@ package com.c0mpile.comix.domain.model
  */
 enum class LibraryFilterTab {
     ALL,
+    SERIES,
     IN_PROGRESS,
     FINISHED
 }

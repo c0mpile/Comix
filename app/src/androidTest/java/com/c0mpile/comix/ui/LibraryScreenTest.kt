@@ -14,6 +14,7 @@ import com.c0mpile.comix.domain.model.ComicAvailability
 import com.c0mpile.comix.domain.model.ComicFormat
 import com.c0mpile.comix.domain.model.ComicLibrary
 import com.c0mpile.comix.domain.model.ComicMetadata
+import com.c0mpile.comix.domain.model.ComicSeries
 import com.c0mpile.comix.domain.model.ComicSourceType
 import com.c0mpile.comix.domain.model.LibraryFilterTab
 import com.c0mpile.comix.domain.model.LibraryFolder
@@ -317,8 +318,8 @@ class LibraryScreenTest {
         composeTestRule.onNodeWithText("Libraries").assertIsDisplayed()
         composeTestRule.onAllNodesWithText("Comics").onFirst().assertIsDisplayed()
         composeTestRule.onNodeWithText("Manga").assertIsDisplayed()
-        composeTestRule.onNodeWithText("LTR").assertIsDisplayed()
-        composeTestRule.onNodeWithText("RTL").assertIsDisplayed()
+        composeTestRule.onNodeWithText("LTR").assertDoesNotExist()
+        composeTestRule.onNodeWithText("RTL").assertDoesNotExist()
         composeTestRule.onNodeWithText("Create library").assertIsDisplayed()
 
         composeTestRule.onNodeWithText("Manga").performClick()
@@ -385,9 +386,13 @@ class LibraryScreenTest {
         }
 
         composeTestRule.onNodeWithText("All").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Series").assertIsDisplayed()
         composeTestRule.onNodeWithText("In Progress").assertIsDisplayed()
         composeTestRule.onNodeWithText("Finished").assertIsDisplayed()
         composeTestRule.onNodeWithText("Search comics", substring = true).assertIsDisplayed()
+
+        composeTestRule.onNodeWithText("Series").performClick()
+        assertEquals(LibraryUiEvent.FilterTabSelected(LibraryFilterTab.SERIES), lastDispatchedEvent)
 
         composeTestRule.onNodeWithText("In Progress").performClick()
         assertEquals(LibraryUiEvent.FilterTabSelected(LibraryFilterTab.IN_PROGRESS), lastDispatchedEvent)
@@ -585,7 +590,7 @@ class LibraryScreenTest {
         composeTestRule.onNodeWithContentDescription("Comic info for Saga #1").performClick()
         assertEquals(LibraryUiEvent.ShowComicDetails(comic), lastDispatchedEvent)
 
-        composeTestRule.onNodeWithText("Series").assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("Series").onFirst().assertIsDisplayed()
         composeTestRule.onNodeWithText("Writer").assertIsDisplayed()
         composeTestRule.onNodeWithText("Brian K. Vaughan").assertIsDisplayed()
         composeTestRule.onNodeWithText("Publisher").assertIsDisplayed()
@@ -598,5 +603,108 @@ class LibraryScreenTest {
         assertEquals(LibraryUiEvent.DismissComicDetails, lastDispatchedEvent)
 
         composeTestRule.onNodeWithText("Two soldiers from opposite sides fall in love.").assertDoesNotExist()
+    }
+
+    @Test
+    fun seriesTabRendersSeriesCardsAndDrillsDownIntoSeriesIssues() {
+        var lastDispatchedEvent: LibraryUiEvent? = null
+        var openedComicKey: String? = null
+
+        val folder = LibraryFolder(
+            folderUri = "content://tree/comics",
+            displayName = "Comics Root",
+            addedAtEpochMillis = 500L,
+            lastScannedAtEpochMillis = 1000L,
+            hasPersistedPermission = true
+        )
+
+        val comic1 = Comic(
+            comicKey = "c1",
+            title = "Spider-Man #1",
+            fileName = "spiderman_1.cbz",
+            format = ComicFormat.CBZ,
+            sourceType = ComicSourceType.LOCAL_SAF,
+            availability = ComicAvailability.LOCAL,
+            sizeBytes = 10_000_000L,
+            lastModifiedEpochMillis = 1000L,
+            pageCount = 10,
+            localUri = "content://tree/spiderman_1.cbz",
+            folderUri = "content://tree/comics"
+        )
+
+        val comic2 = Comic(
+            comicKey = "c2",
+            title = "Spider-Man #2",
+            fileName = "spiderman_2.cbz",
+            format = ComicFormat.CBZ,
+            sourceType = ComicSourceType.LOCAL_SAF,
+            availability = ComicAvailability.LOCAL,
+            sizeBytes = 10_000_000L,
+            lastModifiedEpochMillis = 2000L,
+            pageCount = 12,
+            localUri = "content://tree/spiderman_2.cbz",
+            folderUri = "content://tree/comics"
+        )
+
+        val series = ComicSeries(
+            seriesKey = "spider-man",
+            name = "Spider-Man",
+            comics = listOf(comic1, comic2),
+            coverComic = comic1
+        )
+
+        val uiStateHolder = androidx.compose.runtime.mutableStateOf(
+            LibraryUiState(
+                isInitialLoading = false,
+                folders = listOf(folder),
+                comics = listOf(comic1, comic2),
+                seriesList = listOf(series),
+                totalComicCount = 2,
+                selectedFilterTab = LibraryFilterTab.SERIES,
+                selectedSeriesKey = null
+            )
+        )
+
+        composeTestRule.setContent {
+            ComixTheme {
+                LibraryScreenContent(
+                    uiState = uiStateHolder.value,
+                    onEvent = { event ->
+                        lastDispatchedEvent = event
+                        if (event is LibraryUiEvent.SeriesSelected) {
+                            uiStateHolder.value = uiStateHolder.value.copy(selectedSeriesKey = event.seriesKey)
+                        } else if (event is LibraryUiEvent.ClearSelectedSeries) {
+                            uiStateHolder.value = uiStateHolder.value.copy(selectedSeriesKey = null)
+                        }
+                    },
+                    onAddFolderClick = {},
+                    onOpenComic = { openedComicKey = it }
+                )
+            }
+        }
+
+        // Verify Series card is rendered
+        composeTestRule.onNodeWithText("Spider-Man").assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("2 issues").onFirst().assertIsDisplayed()
+
+        // Click series card to drill down
+        composeTestRule.onNodeWithText("Spider-Man").performClick()
+        assertEquals(LibraryUiEvent.SeriesSelected("spider-man"), lastDispatchedEvent)
+
+        // Verify drill-down header and issues
+        composeTestRule.onNodeWithContentDescription("Back to all series").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Spider-Man #1").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Spider-Man #2").assertIsDisplayed()
+
+        // Clicking a comic issue opens it
+        composeTestRule.onNodeWithText("Spider-Man #1").performClick()
+        assertEquals("c1", openedComicKey)
+
+        // Click back button to return to series grid
+        composeTestRule.onNodeWithContentDescription("Back to all series").performClick()
+        assertEquals(LibraryUiEvent.ClearSelectedSeries, lastDispatchedEvent)
+
+        // Verify we are back to series cards
+        composeTestRule.onNodeWithText("Spider-Man").assertIsDisplayed()
     }
 }

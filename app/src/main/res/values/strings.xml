@@ -159,8 +159,14 @@
 
     <!-- Filter Tabs & Empty Tab States -->
     <string name="tab_all">All</string>
+    <string name="tab_series">Series</string>
     <string name="tab_in_progress">In Progress</string>
     <string name="tab_finished">Finished</string>
+    <string name="series_issue_count_one">1 issue</string>
+    <string name="series_issue_count_many">%1$d issues</string>
+    <string name="action_back_to_series">Back to all series</string>
+    <string name="empty_series_title">No series found</string>
+    <string name="empty_series_message">No comic series found in this library.</string>
     <string name="empty_in_progress_title">No comics in progress</string>
     <string name="empty_in_progress_message">Start reading a comic in this library to see it here.</string>
     <string name="empty_finished_title">No finished comics</string>

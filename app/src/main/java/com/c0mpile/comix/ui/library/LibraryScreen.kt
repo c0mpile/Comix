@@ -85,6 +85,7 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -166,12 +167,23 @@ fun LibraryScreenContent(
     var libraryToEdit by remember { mutableStateOf<ComicLibrary?>(null) }
     val searchFocusRequester = remember { FocusRequester() }
 
+    val effectiveSeriesList = remember(uiState.seriesList, uiState.comics, uiState.sortOrder) {
+        if (uiState.seriesList.isNotEmpty()) uiState.seriesList else groupComicsIntoSeries(uiState.comics, uiState.sortOrder)
+    }
+    val selectedSeries = uiState.selectedSeriesKey?.let { key ->
+        effectiveSeriesList.find { it.seriesKey == key }
+    }
+
     BackHandler(enabled = drawerState.isOpen) {
         coroutineScope.launch { drawerState.close() }
     }
 
     BackHandler(enabled = uiState.isSearchActive) {
         onEvent(LibraryUiEvent.SearchActiveChanged(false))
+    }
+
+    BackHandler(enabled = uiState.selectedFilterTab == LibraryFilterTab.SERIES && selectedSeries != null) {
+        onEvent(LibraryUiEvent.ClearSelectedSeries)
     }
 
     LaunchedEffect(uiState.isSearchActive) {
@@ -297,34 +309,12 @@ fun LibraryScreenContent(
                             coroutineScope.launch { drawerState.close() }
                         },
                         label = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = library.name,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = if (isSelected) {
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                    }
-                                ) {
-                                    Text(
-                                        text = if (library.defaultReadingDirection == ReadingDirection.LEFT_TO_RIGHT) {
-                                            stringResource(R.string.library_direction_ltr_short)
-                                        } else {
-                                            stringResource(R.string.library_direction_rtl_short)
-                                        },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
+                            Text(
+                                text = library.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         },
                         badge = {
                             IconButton(onClick = { libraryToEdit = library }) {
@@ -555,6 +545,7 @@ fun LibraryScreenContent(
 
                     val tabs = listOf(
                         LibraryFilterTab.ALL to R.string.tab_all,
+                        LibraryFilterTab.SERIES to R.string.tab_series,
                         LibraryFilterTab.IN_PROGRESS to R.string.tab_in_progress,
                         LibraryFilterTab.FINISHED to R.string.tab_finished
                     )
@@ -612,10 +603,10 @@ fun LibraryScreenContent(
                         }
 
                         uiState.showEmptyFilterTabState -> {
-                            val (titleRes, messageRes) = if (uiState.selectedFilterTab == LibraryFilterTab.IN_PROGRESS) {
-                                R.string.empty_in_progress_title to R.string.empty_in_progress_message
-                            } else {
-                                R.string.empty_finished_title to R.string.empty_finished_message
+                            val (titleRes, messageRes) = when (uiState.selectedFilterTab) {
+                                LibraryFilterTab.IN_PROGRESS -> R.string.empty_in_progress_title to R.string.empty_in_progress_message
+                                LibraryFilterTab.SERIES -> R.string.empty_series_title to R.string.empty_series_message
+                                else -> R.string.empty_finished_title to R.string.empty_finished_message
                             }
                             EmptyStateView(
                                 title = stringResource(titleRes),
@@ -635,48 +626,178 @@ fun LibraryScreenContent(
                         }
 
                         else -> {
-                            if (uiState.layoutMode == LibraryLayoutMode.GRID) {
-                                LazyVerticalGrid(
-                                    columns = GridCells.Adaptive(minSize = ComixDimens.gridMinCellSize),
-                                    contentPadding = PaddingValues(ComixDimens.gridItemPadding),
-                                    horizontalArrangement = Arrangement.spacedBy(ComixDimens.gridItemPadding),
-                                    verticalArrangement = Arrangement.spacedBy(ComixDimens.gridItemPadding),
-                                    modifier = Modifier.fillMaxSize()
-                                ) {
-                                    items(
-                                        items = uiState.comics,
-                                        key = { it.comicKey }
-                                    ) { comic ->
-                                        ComicGridItem(
-                                            comic = comic,
-                                            onClick = {
-                                                onOpenComic(comic.comicKey)
-                                            },
-                                            onInfoClick = {
-                                                onEvent(LibraryUiEvent.ShowComicDetails(comic))
+                            if (uiState.selectedFilterTab == LibraryFilterTab.SERIES && selectedSeries == null) {
+                                if (uiState.layoutMode == LibraryLayoutMode.GRID) {
+                                    LazyVerticalGrid(
+                                        columns = GridCells.Adaptive(minSize = ComixDimens.gridMinCellSize),
+                                        contentPadding = PaddingValues(ComixDimens.gridItemPadding),
+                                        horizontalArrangement = Arrangement.spacedBy(ComixDimens.gridItemPadding),
+                                        verticalArrangement = Arrangement.spacedBy(ComixDimens.gridItemPadding),
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        items(
+                                            items = effectiveSeriesList,
+                                            key = { it.seriesKey }
+                                        ) { series ->
+                                            SeriesGridItem(
+                                                series = series,
+                                                onClick = {
+                                                    onEvent(LibraryUiEvent.SeriesSelected(series.seriesKey))
+                                                }
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    LazyColumn(
+                                        contentPadding = PaddingValues(ComixDimens.gridItemPadding),
+                                        verticalArrangement = Arrangement.spacedBy(ComixDimens.spacingSmall),
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        items(
+                                            items = effectiveSeriesList,
+                                            key = { it.seriesKey }
+                                        ) { series ->
+                                            SeriesListItem(
+                                                series = series,
+                                                onClick = {
+                                                    onEvent(LibraryUiEvent.SeriesSelected(series.seriesKey))
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            } else if (uiState.selectedFilterTab == LibraryFilterTab.SERIES && selectedSeries != null) {
+                                Column(modifier = Modifier.fillMaxSize()) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(
+                                                horizontal = ComixDimens.spacingSmall,
+                                                vertical = ComixDimens.spacingXSmall
+                                            )
+                                    ) {
+                                        IconButton(onClick = { onEvent(LibraryUiEvent.ClearSelectedSeries) }) {
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                                contentDescription = stringResource(R.string.action_back_to_series)
+                                            )
+                                        }
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = selectedSeries.name,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            val issueCount = selectedSeries.comics.size
+                                            val countText = if (issueCount == 1) {
+                                                stringResource(R.string.series_issue_count_one)
+                                            } else {
+                                                stringResource(R.string.series_issue_count_many, issueCount)
                                             }
-                                        )
+                                            Text(
+                                                text = countText,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+
+                                    if (uiState.layoutMode == LibraryLayoutMode.GRID) {
+                                        LazyVerticalGrid(
+                                            columns = GridCells.Adaptive(minSize = ComixDimens.gridMinCellSize),
+                                            contentPadding = PaddingValues(ComixDimens.gridItemPadding),
+                                            horizontalArrangement = Arrangement.spacedBy(ComixDimens.gridItemPadding),
+                                            verticalArrangement = Arrangement.spacedBy(ComixDimens.gridItemPadding),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .weight(1f)
+                                        ) {
+                                            items(
+                                                items = selectedSeries.comics,
+                                                key = { it.comicKey }
+                                            ) { comic ->
+                                                ComicGridItem(
+                                                    comic = comic,
+                                                    onClick = {
+                                                        onOpenComic(comic.comicKey)
+                                                    },
+                                                    onInfoClick = {
+                                                        onEvent(LibraryUiEvent.ShowComicDetails(comic))
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        LazyColumn(
+                                            contentPadding = PaddingValues(ComixDimens.gridItemPadding),
+                                            verticalArrangement = Arrangement.spacedBy(ComixDimens.spacingSmall),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .weight(1f)
+                                        ) {
+                                            items(
+                                                items = selectedSeries.comics,
+                                                key = { it.comicKey }
+                                            ) { comic ->
+                                                ComicListItem(
+                                                    comic = comic,
+                                                    onClick = {
+                                                        onOpenComic(comic.comicKey)
+                                                    },
+                                                    onInfoClick = {
+                                                        onEvent(LibraryUiEvent.ShowComicDetails(comic))
+                                                    }
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             } else {
-                                LazyColumn(
-                                    contentPadding = PaddingValues(ComixDimens.gridItemPadding),
-                                    verticalArrangement = Arrangement.spacedBy(ComixDimens.spacingSmall),
-                                    modifier = Modifier.fillMaxSize()
-                                ) {
-                                    items(
-                                        items = uiState.comics,
-                                        key = { it.comicKey }
-                                    ) { comic ->
-                                        ComicListItem(
-                                            comic = comic,
-                                            onClick = {
-                                                onOpenComic(comic.comicKey)
-                                            },
-                                            onInfoClick = {
-                                                onEvent(LibraryUiEvent.ShowComicDetails(comic))
-                                            }
-                                        )
+                                if (uiState.layoutMode == LibraryLayoutMode.GRID) {
+                                    LazyVerticalGrid(
+                                        columns = GridCells.Adaptive(minSize = ComixDimens.gridMinCellSize),
+                                        contentPadding = PaddingValues(ComixDimens.gridItemPadding),
+                                        horizontalArrangement = Arrangement.spacedBy(ComixDimens.gridItemPadding),
+                                        verticalArrangement = Arrangement.spacedBy(ComixDimens.gridItemPadding),
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        items(
+                                            items = uiState.comics,
+                                            key = { it.comicKey }
+                                        ) { comic ->
+                                            ComicGridItem(
+                                                comic = comic,
+                                                onClick = {
+                                                    onOpenComic(comic.comicKey)
+                                                },
+                                                onInfoClick = {
+                                                    onEvent(LibraryUiEvent.ShowComicDetails(comic))
+                                                }
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    LazyColumn(
+                                        contentPadding = PaddingValues(ComixDimens.gridItemPadding),
+                                        verticalArrangement = Arrangement.spacedBy(ComixDimens.spacingSmall),
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        items(
+                                            items = uiState.comics,
+                                            key = { it.comicKey }
+                                        ) { comic ->
+                                            ComicListItem(
+                                                comic = comic,
+                                                onClick = {
+                                                    onOpenComic(comic.comicKey)
+                                                },
+                                                onInfoClick = {
+                                                    onEvent(LibraryUiEvent.ShowComicDetails(comic))
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                             }

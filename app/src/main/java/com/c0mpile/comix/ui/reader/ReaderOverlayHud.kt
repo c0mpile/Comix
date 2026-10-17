@@ -96,26 +96,6 @@ fun ReaderOverlayHud(
                         }
                     },
                     actions = {
-                        val directionLabel = if (readingDirection == ReadingDirection.LEFT_TO_RIGHT) {
-                            stringResource(R.string.reader_reading_direction_ltr)
-                        } else {
-                            stringResource(R.string.reader_reading_direction_rtl)
-                        }
-                        val directionCd = stringResource(
-                            R.string.reader_reading_direction_toggle_cd,
-                            directionLabel
-                        )
-                        TextButton(
-                            onClick = onToggleReadingDirection,
-                            modifier = Modifier.semantics { contentDescription = directionCd }
-                        ) {
-                            Text(
-                                text = directionLabel,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-
                         val scaleLabel = if (scaleMode == ReaderScaleMode.FIT_SCREEN) {
                             stringResource(R.string.reader_scale_mode_fit_screen)
                         } else {

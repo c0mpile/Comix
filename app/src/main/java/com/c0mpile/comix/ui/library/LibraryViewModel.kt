@@ -72,7 +72,8 @@ class LibraryViewModel @Inject constructor(
     private data class SearchAndFilterState(
         val query: String = "",
         val isActive: Boolean = false,
-        val selectedFilterTab: LibraryFilterTab = LibraryFilterTab.ALL
+        val selectedFilterTab: LibraryFilterTab = LibraryFilterTab.ALL,
+        val selectedSeriesKey: String? = null
     )
 
     private val scannerState = MutableStateFlow(ScannerState())
@@ -104,7 +105,7 @@ class LibraryViewModel @Inject constructor(
             val revoked = folders.filter { !it.hasPersistedPermission }
 
             val tabFilteredComics = when (filter.selectedFilterTab) {
-                LibraryFilterTab.ALL -> rawComics
+                LibraryFilterTab.ALL, LibraryFilterTab.SERIES -> rawComics
                 LibraryFilterTab.IN_PROGRESS -> rawComics.filter { it.progress != null && !it.progress.isFinished }
                 LibraryFilterTab.FINISHED -> rawComics.filter { it.progress?.isFinished == true }
             }
@@ -142,8 +143,12 @@ class LibraryViewModel @Inject constructor(
                 }
             }
 
+            val seriesList = groupComicsIntoSeries(sortedComics, settings.librarySortOrder)
+
             LibraryUiState(
                 comics = sortedComics,
+                seriesList = seriesList,
+                selectedSeriesKey = filter.selectedSeriesKey,
                 folders = folders,
                 driveFolders = driveFolders,
                 libraries = libraries,
@@ -280,6 +285,7 @@ class LibraryViewModel @Inject constructor(
             }
 
             is LibraryUiEvent.LibrarySelected -> {
+                searchAndFilterState.update { it.copy(selectedSeriesKey = null) }
                 viewModelScope.launch {
                     updateActiveLibraryUseCase(event.libraryId)
                 }
@@ -332,7 +338,17 @@ class LibraryViewModel @Inject constructor(
             }
 
             is LibraryUiEvent.FilterTabSelected -> {
-                searchAndFilterState.update { it.copy(selectedFilterTab = event.tab) }
+                searchAndFilterState.update {
+                    it.copy(selectedFilterTab = event.tab, selectedSeriesKey = null)
+                }
+            }
+
+            is LibraryUiEvent.SeriesSelected -> {
+                searchAndFilterState.update { it.copy(selectedSeriesKey = event.seriesKey) }
+            }
+
+            is LibraryUiEvent.ClearSelectedSeries -> {
+                searchAndFilterState.update { it.copy(selectedSeriesKey = null) }
             }
 
             is LibraryUiEvent.ToggleLayoutMode -> {
