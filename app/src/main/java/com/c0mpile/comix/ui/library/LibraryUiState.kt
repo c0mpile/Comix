@@ -1,20 +1,25 @@
 package com.c0mpile.comix.ui.library
 
+import com.c0mpile.comix.data.archive.NaturalOrderComparator
 import com.c0mpile.comix.domain.model.Comic
 import com.c0mpile.comix.domain.model.ComicError
 import com.c0mpile.comix.domain.model.ComicLibrary
+import com.c0mpile.comix.domain.model.ComicSeries
 import com.c0mpile.comix.domain.model.DriveFolder
 import com.c0mpile.comix.domain.model.LibraryFilterTab
 import com.c0mpile.comix.domain.model.LibraryFolder
 import com.c0mpile.comix.domain.model.LibraryLayoutMode
 import com.c0mpile.comix.domain.model.LibrarySortOrder
 import com.c0mpile.comix.domain.model.ReadingDirection
+import java.util.Locale
 
 /**
  * Immutable UI state for the Library screen.
  */
 data class LibraryUiState(
     val comics: List<Comic> = emptyList(),
+    val seriesList: List<ComicSeries> = emptyList(),
+    val selectedSeriesKey: String? = null,
     val folders: List<LibraryFolder> = emptyList(),
     val driveFolders: List<DriveFolder> = emptyList(),
     val libraries: List<ComicLibrary> = emptyList(),
@@ -34,6 +39,9 @@ data class LibraryUiState(
 ) {
     val activeLibrary: ComicLibrary?
         get() = libraries.find { it.libraryId == activeLibraryId } ?: libraries.firstOrNull()
+
+    val selectedSeries: ComicSeries?
+        get() = selectedSeriesKey?.let { key -> seriesList.find { it.seriesKey == key } }
 
     val showEmptyNoFoldersState: Boolean
         get() = !isInitialLoading && !isScanning && folders.isEmpty() && driveFolders.isEmpty() && comics.isEmpty() && totalComicCount == 0
@@ -67,4 +75,94 @@ sealed interface LibraryUiEvent {
     data object ToggleLayoutMode : LibraryUiEvent
     data class ShowComicDetails(val comic: Comic) : LibraryUiEvent
     data object DismissComicDetails : LibraryUiEvent
+    data class SeriesSelected(val seriesKey: String) : LibraryUiEvent
+    data object ClearSelectedSeries : LibraryUiEvent
+}
+
+private val ISSUE_SUFFIX_REGEX = Regex(
+    """(?:[\s_-]+(?:issue|vol\.?|volume|ch\.?|chapter|part)\s*#?\d+.*|[\s_-]+#\d+.*|[\s_-]+\d+)$""",
+    RegexOption.IGNORE_CASE
+)
+
+/**
+ * Groups a collection of [comics] into [ComicSeries] instances by metadata series name
+ * or title-derived series name, sorting comics naturally within each series and sorting
+ * the resulting series list according to [sortOrder].
+ */
+fun groupComicsIntoSeries(
+    comics: List<Comic>,
+    sortOrder: LibrarySortOrder = LibrarySortOrder.TITLE_ASC
+): List<ComicSeries> {
+    if (comics.isEmpty()) return emptyList()
+
+    val groups = LinkedHashMap<String, MutableList<Comic>>()
+    val seriesNames = LinkedHashMap<String, String>()
+
+    for (comic in comics) {
+        val metaSeries = comic.metadata?.series?.trim()?.takeIf { it.isNotEmpty() }
+        val derivedName = if (metaSeries != null) {
+            metaSeries
+        } else {
+            val titleTrimmed = comic.title.trim()
+            val stripped = titleTrimmed.replace(ISSUE_SUFFIX_REGEX, "").trim()
+            stripped.ifBlank { titleTrimmed }
+        }
+        val seriesKey = derivedName.lowercase(Locale.ROOT)
+
+        groups.getOrPut(seriesKey) { mutableListOf() }.add(comic)
+        if (!seriesNames.containsKey(seriesKey) || metaSeries != null) {
+            seriesNames[seriesKey] = derivedName
+        }
+    }
+
+    val seriesList = groups.map { (key, groupComics) ->
+        val sortedComics = groupComics.sortedWith { a, b ->
+            val aVol = a.metadata?.volume ?: Int.MAX_VALUE
+            val bVol = b.metadata?.volume ?: Int.MAX_VALUE
+            val volCmp = aVol.compareTo(bVol)
+            if (volCmp != 0) {
+                volCmp
+            } else {
+                val aNum = a.metadata?.number
+                val bNum = b.metadata?.number
+                if (aNum != null && bNum != null) {
+                    val numCmp = NaturalOrderComparator.compare(aNum, bNum)
+                    if (numCmp != 0) numCmp else NaturalOrderComparator.compare(a.title, b.title)
+                } else if (aNum != null) {
+                    -1
+                } else if (bNum != null) {
+                    1
+                } else {
+                    NaturalOrderComparator.compare(a.title, b.title)
+                }
+            }
+        }
+        ComicSeries(
+            seriesKey = key,
+            name = seriesNames[key] ?: key,
+            comics = sortedComics,
+            coverComic = sortedComics.first()
+        )
+    }
+
+    return when (sortOrder) {
+        LibrarySortOrder.TITLE_ASC -> seriesList.sortedWith { a, b ->
+            NaturalOrderComparator.compare(a.name, b.name)
+        }
+        LibrarySortOrder.TITLE_DESC -> seriesList.sortedWith { a, b ->
+            NaturalOrderComparator.compare(b.name, a.name)
+        }
+        LibrarySortOrder.RECENTLY_READ -> seriesList.sortedWith { a, b ->
+            val aTime = a.comics.maxOfOrNull { it.progress?.updatedAtEpochMillis ?: 0L } ?: 0L
+            val bTime = b.comics.maxOfOrNull { it.progress?.updatedAtEpochMillis ?: 0L } ?: 0L
+            val timeCmp = bTime.compareTo(aTime)
+            if (timeCmp != 0) timeCmp else NaturalOrderComparator.compare(a.name, b.name)
+        }
+        LibrarySortOrder.DATE_ADDED_DESC -> seriesList.sortedWith { a, b ->
+            val aTime = a.comics.maxOfOrNull { it.lastModifiedEpochMillis } ?: 0L
+            val bTime = b.comics.maxOfOrNull { it.lastModifiedEpochMillis } ?: 0L
+            val timeCmp = bTime.compareTo(aTime)
+            if (timeCmp != 0) timeCmp else NaturalOrderComparator.compare(a.name, b.name)
+        }
+    }
 }
