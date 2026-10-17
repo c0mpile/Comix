@@ -271,6 +271,50 @@ class DriveRepositoryImplTest {
     }
 
     @Test
+    fun rescanFolderIndexesPdfFilesWithComicFormatPdf() = runTest(testDispatcher) {
+        val pdfFile = DriveFile(
+            id = "df-pdf",
+            name = "Graphic Novel.pdf",
+            mimeType = "application/pdf",
+            md5Checksum = "9876543210ab",
+            size = 4000L,
+            modifiedTime = "2024-01-01T00:00:00Z"
+        )
+
+        coEvery { driveSource.scanDriveFiles("folder-pdf") } returns listOf(pdfFile)
+        coEvery { comicDao.getComicsByDriveFolder("folder-pdf") } returns emptyList()
+        coEvery { comicDao.deleteByKeys(any()) } returns Unit
+        coEvery { comicDao.upsertComics(any()) } returns Unit
+        coEvery { driveFolderDao.updateLastScanned("folder-pdf", any()) } returns Unit
+
+        val result = repository.rescanFolder("folder-pdf")
+
+        assertTrue(result.isSuccess)
+        val scanResult = result.getOrThrow()
+        assertEquals(1, scanResult.addedOrUpdatedCount)
+        assertEquals(0, scanResult.removedCount)
+
+        val upsertSlot = slot<List<ComicEntity>>()
+        coVerify { comicDao.upsertComics(capture(upsertSlot)) }
+        val upserted = upsertSlot.captured
+        assertEquals(1, upserted.size)
+
+        val comic = upserted.first()
+        assertEquals("md5:9876543210ab", comic.comicKey)
+        assertEquals("Graphic Novel", comic.title)
+        assertEquals("Graphic Novel.pdf", comic.fileName)
+        assertEquals(ComicFormat.PDF, comic.format)
+        assertEquals(ComicSourceType.GOOGLE_DRIVE, comic.sourceType)
+        assertEquals(ComicAvailability.REMOTE, comic.availability)
+        assertEquals(0, comic.pageCount)
+        assertNull(comic.localUri)
+        assertEquals("df-pdf", comic.driveFileId)
+        assertEquals("9876543210ab", comic.driveMd5)
+
+        coVerify { driveFolderDao.updateLastScanned("folder-pdf", any()) }
+    }
+
+    @Test
     fun incrementalSyncDeletesRemovedComicsAndUpdatesPageToken() = runTest(testDispatcher) {
         val registeredFolder = DriveFolderEntity(
             folderId = "f1",
@@ -342,6 +386,52 @@ class DriveRepositoryImplTest {
         )
 
         coEvery { driveSource.scanDriveFiles("f1") } returns listOf(changedCbz)
+        coEvery { comicDao.getComicsByDriveFolder("f1") } returns emptyList()
+        coEvery { comicDao.deleteByKeys(any()) } returns Unit
+        coEvery { comicDao.upsertComics(any()) } returns Unit
+        coEvery { driveFolderDao.updateLastScanned("f1", any()) } returns Unit
+        coEvery { driveAccountDao.updateChangesPageToken("token-2") } returns Unit
+
+        val result = repository.incrementalSync()
+
+        assertTrue(result.isSuccess)
+        val scan = result.getOrThrow()
+        assertEquals(1, scan.addedOrUpdatedCount)
+        assertEquals(0, scan.removedCount)
+
+        coVerify { driveSource.scanDriveFiles("f1") }
+        coVerify { driveAccountDao.updateChangesPageToken("token-2") }
+    }
+
+    @Test
+    fun incrementalSyncWithRelevantPdfChangeTriggersFolderRescan() = runTest(testDispatcher) {
+        val registeredFolder = DriveFolderEntity(
+            folderId = "f1",
+            displayName = "PDF Comics",
+            addedAtEpochMillis = 1000L,
+            lastScannedAtEpochMillis = 2000L
+        )
+        coEvery { driveFolderDao.getAllFolders() } returns listOf(registeredFolder)
+        coEvery { driveAccountDao.getAccount() } returns DriveAccountEntity(
+            email = "reader@example.com",
+            signedInAtEpochMillis = 1000L,
+            changesPageToken = "token-1"
+        )
+
+        val changedPdf = DriveFile(
+            id = "df-pdf-new",
+            name = "Watchmen.pdf",
+            mimeType = "application/pdf",
+            md5Checksum = "watchmenmd5",
+            size = 5000L
+        )
+        coEvery { apiClient.listChanges("token-1") } returns DriveChangeList(
+            changes = listOf(DriveChange(fileId = "df-pdf-new", removed = false, file = changedPdf)),
+            nextPageToken = null,
+            newStartPageToken = "token-2"
+        )
+
+        coEvery { driveSource.scanDriveFiles("f1") } returns listOf(changedPdf)
         coEvery { comicDao.getComicsByDriveFolder("f1") } returns emptyList()
         coEvery { comicDao.deleteByKeys(any()) } returns Unit
         coEvery { comicDao.upsertComics(any()) } returns Unit

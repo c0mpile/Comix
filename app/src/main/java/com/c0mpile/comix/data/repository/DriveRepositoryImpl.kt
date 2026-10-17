@@ -198,11 +198,12 @@ class DriveRepositoryImpl @Inject constructor(
                 val comicKey = "md5:$md5"
                 val existingComic = existingByKey[comicKey] ?: existingByFileId[file.id]
 
+                val format = DriveSource.detectSupportedFormat(file.name, file.md5Checksum) ?: ComicFormat.CBZ
                 val entity = ComicEntity(
                     comicKey = comicKey,
                     title = file.name.substringBeforeLast('.'),
                     fileName = file.name,
-                    format = ComicFormat.CBZ,
+                    format = format,
                     sourceType = ComicSourceType.GOOGLE_DRIVE,
                     availability = existingComic?.availability ?: ComicAvailability.REMOTE,
                     sizeBytes = file.size ?: 0L,
@@ -278,7 +279,8 @@ class DriveRepositoryImpl @Inject constructor(
                         } else if (file != null) {
                             if (file.mimeType == MIME_TYPE_FOLDER ||
                                 file.mimeType == MIME_TYPE_SHORTCUT ||
-                                file.name.endsWith(".cbz", ignoreCase = true)
+                                file.name.endsWith(".cbz", ignoreCase = true) ||
+                                file.name.endsWith(".pdf", ignoreCase = true)
                             ) {
                                 hasRelevantChange = true
                             }

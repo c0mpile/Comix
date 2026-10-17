@@ -120,7 +120,8 @@ class LocalSource @Inject constructor(
                                 queue.add(childDocId)
                             }
                         } else {
-                            if (!displayName.startsWith(".") && displayName.endsWith(".cbz", ignoreCase = true)) {
+                            val format = detectSupportedFormat(displayName)
+                            if (format != null) {
                                 val fileUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childDocId).toString()
                                 val title = displayName.substringBeforeLast('.')
                                 discoveredFiles.add(
@@ -129,7 +130,7 @@ class LocalSource @Inject constructor(
                                         folderUri = folderUri,
                                         fileName = displayName,
                                         title = title,
-                                        format = ComicFormat.CBZ,
+                                        format = format,
                                         sizeBytes = maxOf(0L, sizeBytes),
                                         lastModifiedEpochMillis = maxOf(0L, lastMod)
                                     )
@@ -145,4 +146,19 @@ class LocalSource @Inject constructor(
 
     override suspend fun openRandomAccessSource(uri: String): RandomAccessSource =
         randomAccessSourceFactory.openLocal(uri)
+
+    companion object {
+        /**
+         * Returns the supported [ComicFormat] for [fileName] based on its extension,
+         * or null if the file is hidden (starts with '.') or of an unsupported format.
+         */
+        fun detectSupportedFormat(fileName: String): ComicFormat? {
+            if (fileName.startsWith(".")) return null
+            return when {
+                fileName.endsWith(".cbz", ignoreCase = true) -> ComicFormat.CBZ
+                fileName.endsWith(".pdf", ignoreCase = true) -> ComicFormat.PDF
+                else -> null
+            }
+        }
+    }
 }

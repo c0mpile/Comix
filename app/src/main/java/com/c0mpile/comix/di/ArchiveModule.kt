@@ -1,7 +1,7 @@
 package com.c0mpile.comix.di
 
-import com.c0mpile.comix.data.archive.CbzArchiveReaderFactory
 import com.c0mpile.comix.data.archive.ComicArchiveReaderFactory
+import com.c0mpile.comix.data.archive.CompositeComicArchiveReaderFactory
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -18,6 +18,6 @@ abstract class ArchiveModule {
     @Binds
     @Singleton
     abstract fun bindComicArchiveReaderFactory(
-        impl: CbzArchiveReaderFactory
+        impl: CompositeComicArchiveReaderFactory
     ): ComicArchiveReaderFactory
 }
