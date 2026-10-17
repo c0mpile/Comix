@@ -1,17 +1,18 @@
 package com.c0mpile.comix.ui.library
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -22,9 +23,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.c0mpile.comix.R
 import com.c0mpile.comix.data.archive.ComicCoverRequest
@@ -61,6 +64,29 @@ fun ComicGridItem(
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
+                if (comic.availability == ComicAvailability.REMOTE && comic.localUri == null && comic.coverCachePath == null) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(ComixDimens.spacingMedium),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_cloud),
+                            contentDescription = null,
+                            modifier = Modifier.size(ComixDimens.iconLarge),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(ComixDimens.spacingSmall))
+                        Text(
+                            text = comic.format.name,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
                 AsyncImage(
                     model = ComicCoverRequest(
                         comicKey = comic.comicKey,
@@ -75,6 +101,37 @@ fun ComicGridItem(
                     modifier = Modifier.fillMaxSize()
                 )
 
+                if (comic.sourceType == ComicSourceType.GOOGLE_DRIVE) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(ComixDimens.spacingSmall)
+                            .clip(RoundedCornerShape(ComixDimens.badgeCornerRadius))
+                            .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f))
+                            .padding(
+                                horizontal = ComixDimens.spacingSmall,
+                                vertical = ComixDimens.spacingXSmall
+                            )
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(ComixDimens.spacingXSmall)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_cloud),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = stringResource(R.string.drive_badge_in_drive),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
+                }
+
                 val progress = comic.progress
                 val badgeText = when {
                     progress != null && progress.isFinished ->
@@ -85,6 +142,8 @@ fun ComicGridItem(
                             progress.currentPage + 1,
                             comic.pageCount
                         )
+                    comic.availability == ComicAvailability.REMOTE && comic.pageCount == 0 ->
+                        stringResource(R.string.drive_badge_in_drive)
                     comic.pageCount == 1 ->
                         stringResource(R.string.page_count_single)
                     else ->

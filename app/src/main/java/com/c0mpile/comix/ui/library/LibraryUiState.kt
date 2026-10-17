@@ -2,6 +2,7 @@ package com.c0mpile.comix.ui.library
 
 import com.c0mpile.comix.domain.model.Comic
 import com.c0mpile.comix.domain.model.ComicError
+import com.c0mpile.comix.domain.model.DriveFolder
 import com.c0mpile.comix.domain.model.LibraryFolder
 import com.c0mpile.comix.domain.model.LibrarySortOrder
 
@@ -11,6 +12,7 @@ import com.c0mpile.comix.domain.model.LibrarySortOrder
 data class LibraryUiState(
     val comics: List<Comic> = emptyList(),
     val folders: List<LibraryFolder> = emptyList(),
+    val driveFolders: List<DriveFolder> = emptyList(),
     val isInitialLoading: Boolean = true,
     val isScanning: Boolean = false,
     val revokedFolders: List<LibraryFolder> = emptyList(),
@@ -22,10 +24,10 @@ data class LibraryUiState(
     val totalComicCount: Int = comics.size
 ) {
     val showEmptyNoFoldersState: Boolean
-        get() = !isInitialLoading && !isScanning && folders.isEmpty() && comics.isEmpty() && totalComicCount == 0
+        get() = !isInitialLoading && !isScanning && folders.isEmpty() && driveFolders.isEmpty() && comics.isEmpty() && totalComicCount == 0
 
     val showEmptyNoComicsState: Boolean
-        get() = !isInitialLoading && !isScanning && folders.isNotEmpty() && comics.isEmpty() && totalComicCount == 0 && revokedFolders.isEmpty()
+        get() = !isInitialLoading && !isScanning && (folders.isNotEmpty() || driveFolders.isNotEmpty()) && comics.isEmpty() && totalComicCount == 0 && revokedFolders.isEmpty()
 
     val showEmptySearchResultsState: Boolean
         get() = !isInitialLoading && !isScanning && totalComicCount > 0 && comics.isEmpty() && searchQuery.isNotBlank()

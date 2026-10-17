@@ -1,21 +1,25 @@
 package com.c0mpile.comix.ui.library
 
 import app.cash.turbine.test
+import com.c0mpile.comix.data.remote.drive.DriveApiException
 import com.c0mpile.comix.domain.model.Comic
 import com.c0mpile.comix.domain.model.ComicAvailability
 import com.c0mpile.comix.domain.model.ComicError
 import com.c0mpile.comix.domain.model.ComicFormat
 import com.c0mpile.comix.domain.model.ComicSourceType
+import com.c0mpile.comix.domain.model.DriveFolder
 import com.c0mpile.comix.domain.model.LibraryFolder
 import com.c0mpile.comix.domain.model.LibrarySortOrder
 import com.c0mpile.comix.domain.model.ReadingProgress
 import com.c0mpile.comix.domain.model.ScanResult
 import com.c0mpile.comix.domain.model.UserSettings
 import com.c0mpile.comix.domain.usecase.AddLibraryFolderUseCase
+import com.c0mpile.comix.domain.usecase.ObserveDriveFoldersUseCase
 import com.c0mpile.comix.domain.usecase.ObserveLibraryComicsUseCase
 import com.c0mpile.comix.domain.usecase.ObserveLibraryFoldersUseCase
 import com.c0mpile.comix.domain.usecase.ObserveUserSettingsUseCase
 import com.c0mpile.comix.domain.usecase.RemoveLibraryFolderUseCase
+import com.c0mpile.comix.domain.usecase.RescanDriveUseCase
 import com.c0mpile.comix.domain.usecase.RescanLibraryUseCase
 import com.c0mpile.comix.domain.usecase.UpdateLibrarySortOrderUseCase
 import io.mockk.coEvery
@@ -46,14 +50,17 @@ class LibraryViewModelTest {
 
     private val observeLibraryComicsUseCase = mockk<ObserveLibraryComicsUseCase>()
     private val observeLibraryFoldersUseCase = mockk<ObserveLibraryFoldersUseCase>()
+    private val observeDriveFoldersUseCase = mockk<ObserveDriveFoldersUseCase>()
     private val addLibraryFolderUseCase = mockk<AddLibraryFolderUseCase>()
     private val rescanLibraryUseCase = mockk<RescanLibraryUseCase>()
+    private val rescanDriveUseCase = mockk<RescanDriveUseCase>()
     private val removeLibraryFolderUseCase = mockk<RemoveLibraryFolderUseCase>()
     private val observeUserSettingsUseCase = mockk<ObserveUserSettingsUseCase>()
     private val updateLibrarySortOrderUseCase = mockk<UpdateLibrarySortOrderUseCase>()
 
     private val comicsFlow = MutableStateFlow<List<Comic>>(emptyList())
     private val foldersFlow = MutableStateFlow<List<LibraryFolder>>(emptyList())
+    private val driveFoldersFlow = MutableStateFlow<List<DriveFolder>>(emptyList())
     private val userSettingsFlow = MutableStateFlow(UserSettings())
 
     private val testDispatcher = StandardTestDispatcher()
@@ -65,14 +72,18 @@ class LibraryViewModelTest {
         Dispatchers.setMain(testDispatcher)
         every { observeLibraryComicsUseCase() } returns comicsFlow
         every { observeLibraryFoldersUseCase() } returns foldersFlow
+        every { observeDriveFoldersUseCase() } returns driveFoldersFlow
         every { observeUserSettingsUseCase() } returns userSettingsFlow
         coEvery { updateLibrarySortOrderUseCase(any()) } returns Unit
+        coEvery { rescanDriveUseCase() } returns Result.success(ScanResult(0, 0, 0, emptyList()))
 
         viewModel = LibraryViewModel(
             observeLibraryComicsUseCase = observeLibraryComicsUseCase,
             observeLibraryFoldersUseCase = observeLibraryFoldersUseCase,
+            observeDriveFoldersUseCase = observeDriveFoldersUseCase,
             addLibraryFolderUseCase = addLibraryFolderUseCase,
             rescanLibraryUseCase = rescanLibraryUseCase,
+            rescanDriveUseCase = rescanDriveUseCase,
             removeLibraryFolderUseCase = removeLibraryFolderUseCase,
             observeUserSettingsUseCase = observeUserSettingsUseCase,
             updateLibrarySortOrderUseCase = updateLibrarySortOrderUseCase
@@ -471,6 +482,70 @@ class LibraryViewModelTest {
         testScheduler.advanceUntilIdle()
 
         coVerify(exactly = 1) { updateLibrarySortOrderUseCase(LibrarySortOrder.RECENTLY_READ) }
+    }
+
+    @Test
+    fun uiStateEmitsDriveFoldersFromUseCase() = runTest(testDispatcher) {
+        val testDriveFolder = DriveFolder("drive_1", "Drive Manga", 1000L, null)
+        driveFoldersFlow.value = listOf(testDriveFolder)
+
+        viewModel.uiState.test {
+            var state = awaitItem()
+            while (state.isInitialLoading) {
+                state = awaitItem()
+            }
+            assertEquals(1, state.driveFolders.size)
+            assertEquals("Drive Manga", state.driveFolders[0].displayName)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun rescanRequestedWithDriveFoldersExecutesBothLocalAndDriveRescan() = runTest(testDispatcher) {
+        val testDriveFolder = DriveFolder("drive_1", "Drive Manga", 1000L, null)
+        driveFoldersFlow.value = listOf(testDriveFolder)
+        coEvery { rescanLibraryUseCase() } returns Result.success(ScanResult(addedOrUpdatedCount = 1, removedCount = 0, skippedCorruptCount = 0, errors = emptyList()))
+        coEvery { rescanDriveUseCase() } returns Result.success(ScanResult(addedOrUpdatedCount = 2, removedCount = 0, skippedCorruptCount = 0, errors = emptyList()))
+
+        viewModel.uiState.test {
+            var state = awaitItem()
+            while (state.isInitialLoading) {
+                state = awaitItem()
+            }
+
+            viewModel.onEvent(LibraryUiEvent.RescanRequested)
+            testScheduler.advanceUntilIdle()
+
+            coVerify(exactly = 1) { rescanLibraryUseCase() }
+            coVerify(exactly = 1) { rescanDriveUseCase() }
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun rescanRequestedHandlesDriveApiErrorWithoutClearingLocalComics() = runTest(testDispatcher) {
+        val testComic = createTestComic("comic1", "Spider-Man #1")
+        val testDriveFolder = DriveFolder("drive_1", "Drive Manga", 1000L, null)
+        comicsFlow.value = listOf(testComic)
+        driveFoldersFlow.value = listOf(testDriveFolder)
+
+        coEvery { rescanLibraryUseCase() } returns Result.success(ScanResult(0, 0, 0, emptyList()))
+        coEvery { rescanDriveUseCase() } returns Result.failure(DriveApiException(ComicError.AuthExpired))
+
+        viewModel.uiState.test {
+            var state = awaitItem()
+            while (state.isInitialLoading) {
+                state = awaitItem()
+            }
+
+            viewModel.onEvent(LibraryUiEvent.RescanRequested)
+            testScheduler.advanceUntilIdle()
+
+            val errorState = viewModel.uiState.value
+            assertEquals(ComicError.AuthExpired, errorState.activeError)
+            assertEquals(1, errorState.comics.size)
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 
     private fun createTestComic(
