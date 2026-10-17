@@ -13,6 +13,7 @@ import com.c0mpile.comix.domain.model.Comic
 import com.c0mpile.comix.domain.model.ComicAvailability
 import com.c0mpile.comix.domain.model.ComicFormat
 import com.c0mpile.comix.domain.model.ComicLibrary
+import com.c0mpile.comix.domain.model.ComicMetadata
 import com.c0mpile.comix.domain.model.ComicSourceType
 import com.c0mpile.comix.domain.model.LibraryFilterTab
 import com.c0mpile.comix.domain.model.LibraryFolder
@@ -508,5 +509,95 @@ class LibraryScreenTest {
 
         composeTestRule.onNodeWithText("Spider-Man #1").performClick()
         assertEquals("sm_issue_1", openedComicKey)
+    }
+
+    @Test
+    fun comicInfoButtonClickDispatchesShowComicDetailsAndRendersDetailsDialog() {
+        var lastDispatchedEvent: LibraryUiEvent? = null
+
+        val metadata = ComicMetadata(
+            title = "Chapter 1: The Beginning",
+            series = "Saga",
+            number = "1",
+            volume = 1,
+            summary = "Two soldiers from opposite sides fall in love.",
+            writer = "Brian K. Vaughan",
+            penciller = "Fiona Staples",
+            publisher = "Image Comics",
+            genre = "Sci-Fi",
+            releaseYear = 2012,
+            releaseMonth = 3,
+            releaseDay = 14
+        )
+
+        val comic = Comic(
+            comicKey = "saga_1",
+            title = "Saga #1",
+            fileName = "saga_01.cbz",
+            format = ComicFormat.CBZ,
+            sourceType = ComicSourceType.LOCAL_SAF,
+            availability = ComicAvailability.LOCAL,
+            sizeBytes = 25_000_000L,
+            lastModifiedEpochMillis = 1000L,
+            pageCount = 44,
+            localUri = "content://tree/saga_01.cbz",
+            folderUri = "content://tree/comics",
+            metadata = metadata
+        )
+
+        val folder = LibraryFolder(
+            folderUri = "content://tree/comics",
+            displayName = "Comics Root",
+            addedAtEpochMillis = 500L,
+            lastScannedAtEpochMillis = 1000L,
+            hasPersistedPermission = true
+        )
+
+        val uiStateHolder = androidx.compose.runtime.mutableStateOf(
+            LibraryUiState(
+                isInitialLoading = false,
+                folders = listOf(folder),
+                comics = listOf(comic),
+                totalComicCount = 1,
+                selectedComicForDetails = null
+            )
+        )
+
+        composeTestRule.setContent {
+            ComixTheme {
+                LibraryScreenContent(
+                    uiState = uiStateHolder.value,
+                    onEvent = { event ->
+                        lastDispatchedEvent = event
+                        if (event is LibraryUiEvent.ShowComicDetails) {
+                            uiStateHolder.value = uiStateHolder.value.copy(selectedComicForDetails = event.comic)
+                        } else if (event is LibraryUiEvent.DismissComicDetails) {
+                            uiStateHolder.value = uiStateHolder.value.copy(selectedComicForDetails = null)
+                        }
+                    },
+                    onAddFolderClick = {},
+                    onOpenComic = {}
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Saga #1").assertIsDisplayed()
+
+        composeTestRule.onNodeWithContentDescription("Comic info for Saga #1").performClick()
+        assertEquals(LibraryUiEvent.ShowComicDetails(comic), lastDispatchedEvent)
+
+        composeTestRule.onNodeWithText("Series").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Writer").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Brian K. Vaughan").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Publisher").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Image Comics").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Summary").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Two soldiers from opposite sides fall in love.").assertIsDisplayed()
+
+        composeTestRule.onNodeWithText("Close").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Close").performClick()
+        assertEquals(LibraryUiEvent.DismissComicDetails, lastDispatchedEvent)
+
+        composeTestRule.onNodeWithText("Two soldiers from opposite sides fall in love.").assertDoesNotExist()
     }
 }
