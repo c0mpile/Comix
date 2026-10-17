@@ -64,7 +64,7 @@ class ReaderScreenTest {
     }
 
     @Test
-    fun rendersHudWithReadingDirectionAndScaleModeTogglesAndDispatchesEvents() {
+    fun rendersHudWithScaleModeToggleAndDispatchesEvents() {
         val capturedEvents = mutableListOf<ReaderUiEvent>()
         val testBitmap = Bitmap.createBitmap(200, 300, Bitmap.Config.ARGB_8888)
 
@@ -90,11 +90,9 @@ class ReaderScreenTest {
             }
         }
 
-        composeTestRule.onNodeWithText("LTR").assertIsDisplayed()
+        composeTestRule.onNodeWithText("LTR").assertDoesNotExist()
+        composeTestRule.onNodeWithText("RTL").assertDoesNotExist()
         composeTestRule.onNodeWithText("Fit Screen").assertIsDisplayed()
-
-        composeTestRule.onNodeWithText("LTR").performClick()
-        assertEquals(ReaderUiEvent.ToggleReadingDirection, capturedEvents.last())
 
         composeTestRule.onNodeWithText("Fit Screen").performClick()
         assertEquals(ReaderUiEvent.ToggleScaleMode, capturedEvents.last())

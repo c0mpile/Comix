@@ -8,6 +8,7 @@ import com.c0mpile.comix.domain.model.ComicError
 import com.c0mpile.comix.domain.model.ComicFormat
 import com.c0mpile.comix.domain.model.ComicLibrary
 import com.c0mpile.comix.domain.model.ComicMetadata
+import com.c0mpile.comix.domain.model.ComicSeries
 import com.c0mpile.comix.domain.model.ComicSourceType
 import com.c0mpile.comix.domain.model.DriveFolder
 import com.c0mpile.comix.domain.model.LibraryFilterTab
@@ -799,6 +800,160 @@ class LibraryViewModelTest {
             val writerSearchState = viewModel.uiState.value
             assertEquals(1, writerSearchState.comics.size)
             assertEquals("c2", writerSearchState.comics.first().comicKey)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun groupComicsIntoSeriesGroupsByMetadataSeriesAndDerivesFromTitle() {
+        val comicMeta1 = createTestComic("c1", "Issue 1").copy(
+            metadata = ComicMetadata(series = "Monstress", number = "1")
+        )
+        val comicMeta2 = createTestComic("c2", "Issue 2").copy(
+            metadata = ComicMetadata(series = "Monstress", number = "2")
+        )
+        val comicDerived1 = createTestComic("c3", "Spider-Man #1")
+        val comicDerived2 = createTestComic("c4", "Spider-Man #2")
+        val comicVolume = createTestComic("c5", "Batman Vol. 1 #05")
+        val comicChapter = createTestComic("c6", "One Piece Chapter 100")
+        val comicPlain = createTestComic("c7", "Watchmen")
+
+        val result = groupComicsIntoSeries(
+            listOf(comicMeta1, comicMeta2, comicDerived1, comicDerived2, comicVolume, comicChapter, comicPlain),
+            sortOrder = LibrarySortOrder.TITLE_ASC
+        )
+
+        val seriesMap = result.associateBy { it.name }
+        assertTrue(seriesMap.containsKey("Monstress"))
+        assertEquals(2, seriesMap["Monstress"]?.comics?.size)
+        assertEquals("monstress", seriesMap["Monstress"]?.seriesKey)
+
+        assertTrue(seriesMap.containsKey("Spider-Man"))
+        assertEquals(2, seriesMap["Spider-Man"]?.comics?.size)
+        assertEquals("spider-man", seriesMap["Spider-Man"]?.seriesKey)
+
+        assertTrue(seriesMap.containsKey("Batman"))
+        assertEquals(1, seriesMap["Batman"]?.comics?.size)
+
+        assertTrue(seriesMap.containsKey("One Piece"))
+        assertEquals(1, seriesMap["One Piece"]?.comics?.size)
+
+        assertTrue(seriesMap.containsKey("Watchmen"))
+        assertEquals(1, seriesMap["Watchmen"]?.comics?.size)
+    }
+
+    @Test
+    fun groupComicsIntoSeriesSortsIssuesNaturallyAndOrdersSeriesByLibrarySortOrder() {
+        val issue10 = createTestComic("c10", "Hero #10").copy(
+            metadata = ComicMetadata(series = "Hero", number = "10", volume = 1),
+            lastModifiedEpochMillis = 1000L
+        )
+        val issue2 = createTestComic("c2", "Hero #2").copy(
+            metadata = ComicMetadata(series = "Hero", number = "2", volume = 1),
+            lastModifiedEpochMillis = 2000L
+        )
+        val issue1 = createTestComic("c1", "Hero #1").copy(
+            metadata = ComicMetadata(series = "Hero", number = "1", volume = 1),
+            lastModifiedEpochMillis = 3000L,
+            progress = ReadingProgress("c1", currentPage = 5, pageCount = 10, isFinished = false, updatedAtEpochMillis = 5000L)
+        )
+        val vol2Issue1 = createTestComic("c20", "Hero Vol 2 #1").copy(
+            metadata = ComicMetadata(series = "Hero", number = "1", volume = 2),
+            lastModifiedEpochMillis = 4000L
+        )
+
+        val alphaIssue = createTestComic("a1", "Alpha #1").copy(
+            metadata = ComicMetadata(series = "Alpha", number = "1"),
+            lastModifiedEpochMillis = 500L,
+            progress = ReadingProgress("a1", currentPage = 1, pageCount = 10, isFinished = false, updatedAtEpochMillis = 10000L)
+        )
+
+        val comics = listOf(issue10, issue2, issue1, vol2Issue1, alphaIssue)
+
+        // 1. Natural sorting of issues within series
+        val titleAscResult = groupComicsIntoSeries(comics, LibrarySortOrder.TITLE_ASC)
+        assertEquals(2, titleAscResult.size)
+        assertEquals("Alpha", titleAscResult[0].name)
+        assertEquals("Hero", titleAscResult[1].name)
+
+        val heroSeries = titleAscResult[1]
+        // Volume 1 (issues 1, 2, 10), then Volume 2 (issue 1)
+        assertEquals(listOf("c1", "c2", "c10", "c20"), heroSeries.comics.map { it.comicKey })
+        assertEquals("c1", heroSeries.coverComic.comicKey)
+
+        // 2. TITLE_DESC
+        val titleDescResult = groupComicsIntoSeries(comics, LibrarySortOrder.TITLE_DESC)
+        assertEquals("Hero", titleDescResult[0].name)
+        assertEquals("Alpha", titleDescResult[1].name)
+
+        // 3. RECENTLY_READ (Alpha has updatedAt 10000L, Hero has 5000L)
+        val recentResult = groupComicsIntoSeries(comics, LibrarySortOrder.RECENTLY_READ)
+        assertEquals("Alpha", recentResult[0].name)
+        assertEquals("Hero", recentResult[1].name)
+
+        // 4. DATE_ADDED_DESC (Hero max lastModified is 4000L, Alpha is 500L)
+        val dateResult = groupComicsIntoSeries(comics, LibrarySortOrder.DATE_ADDED_DESC)
+        assertEquals("Hero", dateResult[0].name)
+        assertEquals("Alpha", dateResult[1].name)
+    }
+
+    @Test
+    fun seriesEventsUpdateSelectedSeriesAndTabOrLibrarySwitchClearsSelection() = runTest(testDispatcher) {
+        val comic1 = createTestComic("c1", "Spider-Man #1")
+        val comic2 = createTestComic("c2", "Spider-Man #2")
+        val comic3 = createTestComic("c3", "Batman #1")
+
+        comicsFlow.value = listOf(comic1, comic2, comic3)
+        foldersFlow.value = listOf(createTestFolder("content://tree/f1", "Comics", true))
+
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            val initialState = viewModel.uiState.value
+            assertEquals(2, initialState.seriesList.size)
+            assertNull(initialState.selectedSeriesKey)
+            assertNull(initialState.selectedSeries)
+
+            // Switch to SERIES tab
+            viewModel.onEvent(LibraryUiEvent.FilterTabSelected(LibraryFilterTab.SERIES))
+            testScheduler.advanceUntilIdle()
+            assertEquals(LibraryFilterTab.SERIES, viewModel.uiState.value.selectedFilterTab)
+
+            // Select "spider-man" series
+            viewModel.onEvent(LibraryUiEvent.SeriesSelected("spider-man"))
+            testScheduler.advanceUntilIdle()
+
+            val seriesSelectedState = viewModel.uiState.value
+            assertEquals("spider-man", seriesSelectedState.selectedSeriesKey)
+            assertEquals("Spider-Man", seriesSelectedState.selectedSeries?.name)
+            assertEquals(2, seriesSelectedState.selectedSeries?.comics?.size)
+
+            // Clear selected series
+            viewModel.onEvent(LibraryUiEvent.ClearSelectedSeries)
+            testScheduler.advanceUntilIdle()
+            assertNull(viewModel.uiState.value.selectedSeriesKey)
+            assertNull(viewModel.uiState.value.selectedSeries)
+
+            // Select series again, then switch tab to ALL
+            viewModel.onEvent(LibraryUiEvent.SeriesSelected("spider-man"))
+            testScheduler.advanceUntilIdle()
+            assertEquals("spider-man", viewModel.uiState.value.selectedSeriesKey)
+
+            viewModel.onEvent(LibraryUiEvent.FilterTabSelected(LibraryFilterTab.ALL))
+            testScheduler.advanceUntilIdle()
+            assertNull(viewModel.uiState.value.selectedSeriesKey)
+
+            // Select series on SERIES tab, then switch active library
+            viewModel.onEvent(LibraryUiEvent.FilterTabSelected(LibraryFilterTab.SERIES))
+            viewModel.onEvent(LibraryUiEvent.SeriesSelected("spider-man"))
+            testScheduler.advanceUntilIdle()
+            assertEquals("spider-man", viewModel.uiState.value.selectedSeriesKey)
+
+            viewModel.onEvent(LibraryUiEvent.LibrarySelected("manga"))
+            testScheduler.advanceUntilIdle()
+            assertNull(viewModel.uiState.value.selectedSeriesKey)
 
             cancelAndIgnoreRemainingEvents()
         }
