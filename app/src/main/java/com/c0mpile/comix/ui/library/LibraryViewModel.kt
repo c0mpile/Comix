@@ -7,6 +7,7 @@ import com.c0mpile.comix.data.remote.drive.DriveApiException
 import com.c0mpile.comix.domain.model.ComicError
 import com.c0mpile.comix.domain.model.ComicLibrary
 import com.c0mpile.comix.domain.model.LibraryFilterTab
+import com.c0mpile.comix.domain.model.LibraryLayoutMode
 import com.c0mpile.comix.domain.model.LibrarySortOrder
 import com.c0mpile.comix.domain.usecase.AddLibraryFolderUseCase
 import com.c0mpile.comix.domain.usecase.CreateLibraryUseCase
@@ -20,6 +21,7 @@ import com.c0mpile.comix.domain.usecase.RemoveLibraryFolderUseCase
 import com.c0mpile.comix.domain.usecase.RescanDriveUseCase
 import com.c0mpile.comix.domain.usecase.RescanLibraryUseCase
 import com.c0mpile.comix.domain.usecase.UpdateActiveLibraryUseCase
+import com.c0mpile.comix.domain.usecase.UpdateLibraryLayoutModeUseCase
 import com.c0mpile.comix.domain.usecase.UpdateLibrarySortOrderUseCase
 import com.c0mpile.comix.domain.usecase.UpdateLibraryUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -54,7 +56,8 @@ class LibraryViewModel @Inject constructor(
     private val createLibraryUseCase: CreateLibraryUseCase,
     private val updateLibraryUseCase: UpdateLibraryUseCase,
     private val deleteLibraryUseCase: DeleteLibraryUseCase,
-    private val updateActiveLibraryUseCase: UpdateActiveLibraryUseCase
+    private val updateActiveLibraryUseCase: UpdateActiveLibraryUseCase,
+    private val updateLibraryLayoutModeUseCase: UpdateLibraryLayoutModeUseCase
 ) : ViewModel() {
 
     private data class ScannerState(
@@ -137,6 +140,7 @@ class LibraryViewModel @Inject constructor(
                 libraries = libraries,
                 activeLibraryId = activeId,
                 selectedFilterTab = filter.selectedFilterTab,
+                layoutMode = settings.libraryLayoutMode,
                 isInitialLoading = false,
                 isScanning = scan.isScanning,
                 revokedFolders = revoked,
@@ -317,6 +321,17 @@ class LibraryViewModel @Inject constructor(
 
             is LibraryUiEvent.FilterTabSelected -> {
                 searchAndFilterState.update { it.copy(selectedFilterTab = event.tab) }
+            }
+
+            is LibraryUiEvent.ToggleLayoutMode -> {
+                viewModelScope.launch {
+                    val nextMode = if (uiState.value.layoutMode == LibraryLayoutMode.GRID) {
+                        LibraryLayoutMode.LIST
+                    } else {
+                        LibraryLayoutMode.GRID
+                    }
+                    updateLibraryLayoutModeUseCase(nextMode)
+                }
             }
         }
     }

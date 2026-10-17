@@ -6,6 +6,7 @@ import com.c0mpile.comix.domain.model.ComicLibrary
 import com.c0mpile.comix.domain.model.DriveFolder
 import com.c0mpile.comix.domain.model.LibraryFilterTab
 import com.c0mpile.comix.domain.model.LibraryFolder
+import com.c0mpile.comix.domain.model.LibraryLayoutMode
 import com.c0mpile.comix.domain.model.LibrarySortOrder
 import com.c0mpile.comix.domain.model.ReadingDirection
 
@@ -19,6 +20,7 @@ data class LibraryUiState(
     val libraries: List<ComicLibrary> = emptyList(),
     val activeLibraryId: String = ComicLibrary.DEFAULT_COMICS_ID,
     val selectedFilterTab: LibraryFilterTab = LibraryFilterTab.ALL,
+    val layoutMode: LibraryLayoutMode = LibraryLayoutMode.GRID,
     val isInitialLoading: Boolean = true,
     val isScanning: Boolean = false,
     val revokedFolders: List<LibraryFolder> = emptyList(),
@@ -61,4 +63,5 @@ sealed interface LibraryUiEvent {
     data class UpdateLibrarySubmitted(val libraryId: String, val name: String, val defaultReadingDirection: ReadingDirection) : LibraryUiEvent
     data class DeleteLibraryConfirmed(val libraryId: String) : LibraryUiEvent
     data class FilterTabSelected(val tab: LibraryFilterTab) : LibraryUiEvent
+    data object ToggleLayoutMode : LibraryUiEvent
 }

@@ -15,9 +15,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -81,6 +83,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -96,6 +99,7 @@ import com.c0mpile.comix.domain.model.ComicLibrary
 import com.c0mpile.comix.domain.model.ComicSourceType
 import com.c0mpile.comix.domain.model.LibraryFilterTab
 import com.c0mpile.comix.domain.model.LibraryFolder
+import com.c0mpile.comix.domain.model.LibraryLayoutMode
 import com.c0mpile.comix.domain.model.LibrarySortOrder
 import com.c0mpile.comix.domain.model.ReadingDirection
 import com.c0mpile.comix.ui.components.EmptyStateView
@@ -454,6 +458,19 @@ fun LibraryScreenContent(
                                     }
                                 }
                             }
+                            IconButton(onClick = { onEvent(LibraryUiEvent.ToggleLayoutMode) }) {
+                                if (uiState.layoutMode == LibraryLayoutMode.GRID) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_list_view),
+                                        contentDescription = stringResource(R.string.action_switch_to_list_view)
+                                    )
+                                } else {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_grid_view),
+                                        contentDescription = stringResource(R.string.action_switch_to_grid_view)
+                                    )
+                                }
+                            }
                             IconButton(onClick = { onEvent(LibraryUiEvent.RescanRequested) }) {
                                 Icon(
                                     imageVector = Icons.Default.Refresh,
@@ -607,32 +624,61 @@ fun LibraryScreenContent(
                         }
 
                         else -> {
-                            LazyVerticalGrid(
-                                columns = GridCells.Adaptive(minSize = ComixDimens.gridMinCellSize),
-                                contentPadding = PaddingValues(ComixDimens.gridItemPadding),
-                                horizontalArrangement = Arrangement.spacedBy(ComixDimens.gridItemPadding),
-                                verticalArrangement = Arrangement.spacedBy(ComixDimens.gridItemPadding),
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                items(
-                                    items = uiState.comics,
-                                    key = { it.comicKey }
-                                ) { comic ->
-                                    ComicGridItem(
-                                        comic = comic,
-                                        onClick = {
-                                            if (comic.availability == ComicAvailability.REMOTE) {
-                                                coroutineScope.launch {
-                                                    snackbarHostState.showSnackbar(
-                                                        message = driveReadingUnavailableMessage,
-                                                        duration = SnackbarDuration.Short
-                                                    )
+                            if (uiState.layoutMode == LibraryLayoutMode.GRID) {
+                                LazyVerticalGrid(
+                                    columns = GridCells.Adaptive(minSize = ComixDimens.gridMinCellSize),
+                                    contentPadding = PaddingValues(ComixDimens.gridItemPadding),
+                                    horizontalArrangement = Arrangement.spacedBy(ComixDimens.gridItemPadding),
+                                    verticalArrangement = Arrangement.spacedBy(ComixDimens.gridItemPadding),
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    items(
+                                        items = uiState.comics,
+                                        key = { it.comicKey }
+                                    ) { comic ->
+                                        ComicGridItem(
+                                            comic = comic,
+                                            onClick = {
+                                                if (comic.availability == ComicAvailability.REMOTE) {
+                                                    coroutineScope.launch {
+                                                        snackbarHostState.showSnackbar(
+                                                            message = driveReadingUnavailableMessage,
+                                                            duration = SnackbarDuration.Short
+                                                        )
+                                                    }
+                                                } else {
+                                                    onOpenComic(comic.comicKey)
                                                 }
-                                            } else {
-                                                onOpenComic(comic.comicKey)
                                             }
-                                        }
-                                    )
+                                        )
+                                    }
+                                }
+                            } else {
+                                LazyColumn(
+                                    contentPadding = PaddingValues(ComixDimens.gridItemPadding),
+                                    verticalArrangement = Arrangement.spacedBy(ComixDimens.spacingSmall),
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    items(
+                                        items = uiState.comics,
+                                        key = { it.comicKey }
+                                    ) { comic ->
+                                        ComicListItem(
+                                            comic = comic,
+                                            onClick = {
+                                                if (comic.availability == ComicAvailability.REMOTE) {
+                                                    coroutineScope.launch {
+                                                        snackbarHostState.showSnackbar(
+                                                            message = driveReadingUnavailableMessage,
+                                                            duration = SnackbarDuration.Short
+                                                        )
+                                                    }
+                                                } else {
+                                                    onOpenComic(comic.comicKey)
+                                                }
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }

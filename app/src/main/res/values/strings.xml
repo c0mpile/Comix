@@ -51,6 +51,7 @@
     <string name="error_unknown">An unexpected error occurred</string>
 
     <string name="cover_content_description">Cover for %1$s</string>
+    <string name="cd_comic_cover">Cover for %1$s</string>
     <string name="cover_placeholder_description">Comic cover placeholder</string>
     <string name="page_count_single">1 page</string>
     <string name="page_count_plural">%1$d pages</string>
@@ -165,4 +166,8 @@
     <string name="empty_finished_title">No finished comics</string>
     <string name="empty_finished_message">Comics you finish reading in this library will appear here.</string>
     <string name="action_show_all_comics">Show all comics</string>
+
+    <!-- Library Layout Mode Toggle -->
+    <string name="action_switch_to_list_view">Switch to list view</string>
+    <string name="action_switch_to_grid_view">Switch to grid view</string>
 </resources>

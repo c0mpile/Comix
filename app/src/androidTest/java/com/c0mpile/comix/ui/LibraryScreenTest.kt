@@ -16,6 +16,7 @@ import com.c0mpile.comix.domain.model.ComicLibrary
 import com.c0mpile.comix.domain.model.ComicSourceType
 import com.c0mpile.comix.domain.model.LibraryFilterTab
 import com.c0mpile.comix.domain.model.LibraryFolder
+import com.c0mpile.comix.domain.model.LibraryLayoutMode
 import com.c0mpile.comix.domain.model.ReadingDirection
 import com.c0mpile.comix.domain.model.ReadingProgress
 import com.c0mpile.comix.ui.library.LibraryScreenContent
@@ -434,5 +435,78 @@ class LibraryScreenTest {
 
         composeTestRule.onNodeWithText("Show all comics").performClick()
         assertEquals(LibraryUiEvent.FilterTabSelected(LibraryFilterTab.ALL), lastDispatchedEvent)
+    }
+
+    @Test
+    fun toggleLayoutModeDispatchesEventAndRendersListViewComics() {
+        var lastDispatchedEvent: LibraryUiEvent? = null
+        var openedComicKey: String? = null
+
+        val comic = Comic(
+            comicKey = "sm_issue_1",
+            title = "Spider-Man #1",
+            fileName = "spiderman_1.cbz",
+            format = ComicFormat.CBZ,
+            sourceType = ComicSourceType.LOCAL_SAF,
+            availability = ComicAvailability.LOCAL,
+            sizeBytes = 25_000_000L,
+            lastModifiedEpochMillis = 1000L,
+            pageCount = 10,
+            localUri = "content://tree/spiderman_1.cbz",
+            folderUri = "content://tree/comics",
+            progress = ReadingProgress(
+                comicKey = "sm_issue_1",
+                currentPage = 2,
+                pageCount = 10,
+                isFinished = false,
+                updatedAtEpochMillis = 2000L
+            )
+        )
+
+        val folder = LibraryFolder(
+            folderUri = "content://tree/comics",
+            displayName = "Comics Root",
+            addedAtEpochMillis = 500L,
+            lastScannedAtEpochMillis = 1000L,
+            hasPersistedPermission = true
+        )
+
+        val uiStateHolder = androidx.compose.runtime.mutableStateOf(
+            LibraryUiState(
+                isInitialLoading = false,
+                folders = listOf(folder),
+                comics = listOf(comic),
+                layoutMode = LibraryLayoutMode.GRID
+            )
+        )
+
+        composeTestRule.setContent {
+            ComixTheme {
+                LibraryScreenContent(
+                    uiState = uiStateHolder.value,
+                    onEvent = { event ->
+                        lastDispatchedEvent = event
+                        if (event is LibraryUiEvent.ToggleLayoutMode) {
+                            uiStateHolder.value = uiStateHolder.value.copy(layoutMode = LibraryLayoutMode.LIST)
+                        }
+                    },
+                    onAddFolderClick = {},
+                    onOpenComic = { openedComicKey = it }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("Switch to list view").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Switch to list view").performClick()
+        assertEquals(LibraryUiEvent.ToggleLayoutMode, lastDispatchedEvent)
+
+        composeTestRule.onNodeWithContentDescription("Switch to grid view").assertIsDisplayed()
+
+        composeTestRule.onNodeWithText("Spider-Man #1").assertIsDisplayed()
+        composeTestRule.onNodeWithText("spiderman_1.cbz").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Page 3 of 10").assertIsDisplayed()
+
+        composeTestRule.onNodeWithText("Spider-Man #1").performClick()
+        assertEquals("sm_issue_1", openedComicKey)
     }
 }

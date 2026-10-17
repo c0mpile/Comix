@@ -11,6 +11,7 @@ import com.c0mpile.comix.domain.model.ComicSourceType
 import com.c0mpile.comix.domain.model.DriveFolder
 import com.c0mpile.comix.domain.model.LibraryFilterTab
 import com.c0mpile.comix.domain.model.LibraryFolder
+import com.c0mpile.comix.domain.model.LibraryLayoutMode
 import com.c0mpile.comix.domain.model.LibrarySortOrder
 import com.c0mpile.comix.domain.model.ReadingDirection
 import com.c0mpile.comix.domain.model.ReadingProgress
@@ -28,6 +29,7 @@ import com.c0mpile.comix.domain.usecase.RemoveLibraryFolderUseCase
 import com.c0mpile.comix.domain.usecase.RescanDriveUseCase
 import com.c0mpile.comix.domain.usecase.RescanLibraryUseCase
 import com.c0mpile.comix.domain.usecase.UpdateActiveLibraryUseCase
+import com.c0mpile.comix.domain.usecase.UpdateLibraryLayoutModeUseCase
 import com.c0mpile.comix.domain.usecase.UpdateLibrarySortOrderUseCase
 import com.c0mpile.comix.domain.usecase.UpdateLibraryUseCase
 import io.mockk.coEvery
@@ -70,6 +72,7 @@ class LibraryViewModelTest {
     private val updateLibraryUseCase = mockk<UpdateLibraryUseCase>()
     private val deleteLibraryUseCase = mockk<DeleteLibraryUseCase>()
     private val updateActiveLibraryUseCase = mockk<UpdateActiveLibraryUseCase>()
+    private val updateLibraryLayoutModeUseCase = mockk<UpdateLibraryLayoutModeUseCase>()
 
     private val comicsFlow = MutableStateFlow<List<Comic>>(emptyList())
     private val foldersFlow = MutableStateFlow<List<LibraryFolder>>(emptyList())
@@ -114,6 +117,7 @@ class LibraryViewModelTest {
         )
         coEvery { updateLibraryUseCase(any(), any(), any()) } returns Result.success(Unit)
         coEvery { deleteLibraryUseCase(any()) } returns Result.success(Unit)
+        coEvery { updateLibraryLayoutModeUseCase(any()) } returns Unit
 
         viewModel = LibraryViewModel(
             observeLibraryComicsUseCase = observeLibraryComicsUseCase,
@@ -129,7 +133,8 @@ class LibraryViewModelTest {
             createLibraryUseCase = createLibraryUseCase,
             updateLibraryUseCase = updateLibraryUseCase,
             deleteLibraryUseCase = deleteLibraryUseCase,
-            updateActiveLibraryUseCase = updateActiveLibraryUseCase
+            updateActiveLibraryUseCase = updateActiveLibraryUseCase,
+            updateLibraryLayoutModeUseCase = updateLibraryLayoutModeUseCase
         )
     }
 
@@ -705,6 +710,37 @@ class LibraryViewModelTest {
             }
 
             assertEquals(ComicLibrary.DEFAULT_COMICS_ID, state.activeLibraryId)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun toggleLayoutModeTogglesBetweenGridAndList() = runTest(testDispatcher) {
+        viewModel.uiState.test {
+            awaitItem()
+            testScheduler.advanceUntilIdle()
+
+            // Initial mode is GRID
+            assertEquals(LibraryLayoutMode.GRID, viewModel.uiState.value.layoutMode)
+
+            // Toggle from GRID to LIST
+            viewModel.onEvent(LibraryUiEvent.ToggleLayoutMode)
+            testScheduler.advanceUntilIdle()
+
+            coVerify(exactly = 1) { updateLibraryLayoutModeUseCase(LibraryLayoutMode.LIST) }
+
+            // Simulate settings update to LIST
+            userSettingsFlow.value = UserSettings(libraryLayoutMode = LibraryLayoutMode.LIST)
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(LibraryLayoutMode.LIST, viewModel.uiState.value.layoutMode)
+
+            // Toggle from LIST to GRID
+            viewModel.onEvent(LibraryUiEvent.ToggleLayoutMode)
+            testScheduler.advanceUntilIdle()
+
+            coVerify(exactly = 1) { updateLibraryLayoutModeUseCase(LibraryLayoutMode.GRID) }
+
             cancelAndIgnoreRemainingEvents()
         }
     }
