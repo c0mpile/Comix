@@ -1,6 +1,7 @@
 package com.c0mpile.comix.ui.library
 
 import com.c0mpile.comix.data.archive.NaturalOrderComparator
+import com.c0mpile.comix.domain.model.BulkComicMetadataUpdate
 import com.c0mpile.comix.domain.model.Comic
 import com.c0mpile.comix.domain.model.ComicError
 import com.c0mpile.comix.domain.model.ComicLibrary
@@ -11,6 +12,7 @@ import com.c0mpile.comix.domain.model.LibraryFolder
 import com.c0mpile.comix.domain.model.LibraryLayoutMode
 import com.c0mpile.comix.domain.model.LibrarySortOrder
 import com.c0mpile.comix.domain.model.ReadingDirection
+import com.c0mpile.comix.domain.model.SingleComicMetadataUpdate
 import java.util.Locale
 
 /**
@@ -35,13 +37,18 @@ data class LibraryUiState(
     val isSearchActive: Boolean = false,
     val sortOrder: LibrarySortOrder = LibrarySortOrder.TITLE_ASC,
     val totalComicCount: Int = comics.size,
-    val selectedComicForDetails: Comic? = null
+    val selectedComicForDetails: Comic? = null,
+    val selectedComicKeys: Set<String> = emptySet(),
+    val editingMetadataComics: List<Comic>? = null
 ) {
     val activeLibrary: ComicLibrary?
         get() = libraries.find { it.libraryId == activeLibraryId } ?: libraries.firstOrNull()
 
     val selectedSeries: ComicSeries?
         get() = selectedSeriesKey?.let { key -> seriesList.find { it.seriesKey == key } }
+
+    val isSelectionMode: Boolean
+        get() = selectedComicKeys.isNotEmpty()
 
     val showEmptyNoFoldersState: Boolean
         get() = !isInitialLoading && !isScanning && folders.isEmpty() && driveFolders.isEmpty() && comics.isEmpty() && totalComicCount == 0
@@ -77,6 +84,15 @@ sealed interface LibraryUiEvent {
     data object DismissComicDetails : LibraryUiEvent
     data class SeriesSelected(val seriesKey: String) : LibraryUiEvent
     data object ClearSelectedSeries : LibraryUiEvent
+    data class ToggleComicSelected(val comicKey: String) : LibraryUiEvent
+    data class EnterSelectionMode(val comicKey: String) : LibraryUiEvent
+    data object SelectAllComics : LibraryUiEvent
+    data object ClearSelection : LibraryUiEvent
+    data object OpenMetadataEditorForSelection : LibraryUiEvent
+    data class OpenMetadataEditorForComic(val comic: Comic) : LibraryUiEvent
+    data object DismissMetadataEditor : LibraryUiEvent
+    data class SaveSingleMetadata(val update: SingleComicMetadataUpdate) : LibraryUiEvent
+    data class SaveBulkMetadata(val update: BulkComicMetadataUpdate) : LibraryUiEvent
 }
 
 private val ISSUE_SUFFIX_REGEX = Regex(

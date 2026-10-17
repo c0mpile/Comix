@@ -16,6 +16,7 @@ import com.c0mpile.comix.data.source.ComicKeyHasher
 import com.c0mpile.comix.data.source.ComicSource
 import com.c0mpile.comix.data.source.DiscoveredComicFile
 import com.c0mpile.comix.di.IoDispatcher
+import com.c0mpile.comix.domain.model.BulkComicMetadataUpdate
 import com.c0mpile.comix.domain.model.Comic
 import com.c0mpile.comix.domain.model.ComicAvailability
 import com.c0mpile.comix.domain.model.ComicError
@@ -27,6 +28,7 @@ import com.c0mpile.comix.domain.model.LibraryFolder
 import com.c0mpile.comix.domain.model.ReadingDirection
 import com.c0mpile.comix.domain.model.ReadingProgress
 import com.c0mpile.comix.domain.model.ScanResult
+import com.c0mpile.comix.domain.model.SingleComicMetadataUpdate
 import com.c0mpile.comix.domain.repository.LibraryRepository
 import java.io.FileNotFoundException
 import java.io.IOException
@@ -267,6 +269,54 @@ class LibraryRepositoryImpl @Inject constructor(
         withContext(ioDispatcher) {
             comicDao.deleteLocalComicsInFolder(folderUri)
             libraryFolderDao.deleteFolder(folderUri)
+        }
+
+    override suspend fun updateComicMetadata(update: SingleComicMetadataUpdate): Result<Unit> =
+        withContext(ioDispatcher) {
+            val entity = comicDao.getComicByKey(update.comicKey)
+                ?: return@withContext Result.failure(NoSuchElementException("Comic not found: ${update.comicKey}"))
+
+            val trimmedTitle = update.title?.trim()
+            val newTitle = if (!trimmedTitle.isNullOrBlank()) trimmedTitle else entity.title
+
+            val updatedEntity = entity.copy(
+                title = newTitle,
+                metaSeries = update.series?.trim()?.ifBlank { null },
+                metaTitle = trimmedTitle?.ifBlank { null },
+                metaNumber = update.number?.trim()?.ifBlank { null },
+                metaReleaseYear = update.releaseYear,
+                metaWriter = update.writer?.trim()?.ifBlank { null },
+                metaPenciller = update.penciller?.trim()?.ifBlank { null },
+                metaPublisher = update.publisher?.trim()?.ifBlank { null },
+                metaSummary = update.summary?.trim()?.ifBlank { null }
+            )
+
+            comicDao.upsertComic(updatedEntity)
+            Result.success(Unit)
+        }
+
+    override suspend fun bulkUpdateComicMetadata(update: BulkComicMetadataUpdate): Result<Unit> =
+        withContext(ioDispatcher) {
+            if (update.comicKeys.isEmpty()) {
+                return@withContext Result.success(Unit)
+            }
+            val entities = comicDao.getComicsByKeys(update.comicKeys)
+            if (entities.isEmpty()) {
+                return@withContext Result.success(Unit)
+            }
+
+            val updatedEntities = entities.map { entity ->
+                entity.copy(
+                    metaSeries = if (update.updateSeries) update.series?.trim()?.ifBlank { null } else entity.metaSeries,
+                    metaReleaseYear = if (update.updateReleaseYear) update.releaseYear else entity.metaReleaseYear,
+                    metaWriter = if (update.updateWriter) update.writer?.trim()?.ifBlank { null } else entity.metaWriter,
+                    metaPenciller = if (update.updatePenciller) update.penciller?.trim()?.ifBlank { null } else entity.metaPenciller,
+                    metaPublisher = if (update.updatePublisher) update.publisher?.trim()?.ifBlank { null } else entity.metaPublisher
+                )
+            }
+
+            comicDao.upsertComics(updatedEntities)
+            Result.success(Unit)
         }
 
     private suspend fun ensureDefaultLibrariesSeeded() {

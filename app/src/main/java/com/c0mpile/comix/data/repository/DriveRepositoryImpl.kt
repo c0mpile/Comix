@@ -269,7 +269,7 @@ class DriveRepositoryImpl @Inject constructor(
                 val format = DriveSource.detectSupportedFormat(file.name, file.md5Checksum) ?: ComicFormat.CBZ
                 val entity = ComicEntity(
                     comicKey = comicKey,
-                    title = file.name.substringBeforeLast('.'),
+                    title = existingComic?.title ?: file.name.substringBeforeLast('.'),
                     fileName = file.name,
                     format = format,
                     sourceType = ComicSourceType.GOOGLE_DRIVE,
@@ -283,7 +283,19 @@ class DriveRepositoryImpl @Inject constructor(
                     driveFileId = file.id,
                     driveMd5 = md5,
                     coverCachePath = existingComic?.coverCachePath,
-                    libraryId = folderLibraryId
+                    libraryId = folderLibraryId,
+                    metaTitle = existingComic?.metaTitle,
+                    metaSeries = existingComic?.metaSeries,
+                    metaNumber = existingComic?.metaNumber,
+                    metaVolume = existingComic?.metaVolume,
+                    metaSummary = existingComic?.metaSummary,
+                    metaWriter = existingComic?.metaWriter,
+                    metaPenciller = existingComic?.metaPenciller,
+                    metaPublisher = existingComic?.metaPublisher,
+                    metaGenre = existingComic?.metaGenre,
+                    metaReleaseYear = existingComic?.metaReleaseYear,
+                    metaReleaseMonth = existingComic?.metaReleaseMonth,
+                    metaReleaseDay = existingComic?.metaReleaseDay
                 )
 
                 if (existingComic == null) {

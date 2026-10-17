@@ -11,6 +11,7 @@ import com.c0mpile.comix.domain.model.LibraryFilterTab
 import com.c0mpile.comix.domain.model.LibraryLayoutMode
 import com.c0mpile.comix.domain.model.LibrarySortOrder
 import com.c0mpile.comix.domain.usecase.AddLibraryFolderUseCase
+import com.c0mpile.comix.domain.usecase.BulkUpdateComicMetadataUseCase
 import com.c0mpile.comix.domain.usecase.CreateLibraryUseCase
 import com.c0mpile.comix.domain.usecase.DeleteLibraryUseCase
 import com.c0mpile.comix.domain.usecase.ObserveDriveFoldersUseCase
@@ -23,6 +24,7 @@ import com.c0mpile.comix.domain.usecase.RescanDriveUseCase
 import com.c0mpile.comix.domain.usecase.RescanLibraryUseCase
 import com.c0mpile.comix.domain.usecase.SyncDriveReadingProgressUseCase
 import com.c0mpile.comix.domain.usecase.UpdateActiveLibraryUseCase
+import com.c0mpile.comix.domain.usecase.UpdateComicMetadataUseCase
 import com.c0mpile.comix.domain.usecase.UpdateLibraryLayoutModeUseCase
 import com.c0mpile.comix.domain.usecase.UpdateLibrarySortOrderUseCase
 import com.c0mpile.comix.domain.usecase.UpdateLibraryUseCase
@@ -60,6 +62,8 @@ class LibraryViewModel @Inject constructor(
     private val deleteLibraryUseCase: DeleteLibraryUseCase,
     private val updateActiveLibraryUseCase: UpdateActiveLibraryUseCase,
     private val updateLibraryLayoutModeUseCase: UpdateLibraryLayoutModeUseCase,
+    private val updateComicMetadataUseCase: UpdateComicMetadataUseCase,
+    private val bulkUpdateComicMetadataUseCase: BulkUpdateComicMetadataUseCase,
     private val syncDriveReadingProgressUseCase: SyncDriveReadingProgressUseCase? = null
 ) : ViewModel() {
 
@@ -76,9 +80,19 @@ class LibraryViewModel @Inject constructor(
         val selectedSeriesKey: String? = null
     )
 
+    private data class UiExtraState(
+        val scan: ScannerState,
+        val filter: SearchAndFilterState,
+        val detailsComic: Comic?,
+        val selectedKeys: Set<String>,
+        val editingComics: List<Comic>?
+    )
+
     private val scannerState = MutableStateFlow(ScannerState())
     private val searchAndFilterState = MutableStateFlow(SearchAndFilterState())
     private val selectedComicForDetails = MutableStateFlow<Comic?>(null)
+    private val selectedComicKeysState = MutableStateFlow<Set<String>>(emptySet())
+    private val editingMetadataComicsState = MutableStateFlow<List<Comic>?>(null)
 
     private val activeLibraryFlow = combine(
         observeLibrariesUseCase(),
@@ -99,28 +113,37 @@ class LibraryViewModel @Inject constructor(
             observeLibraryFoldersUseCase(activeId),
             observeDriveFoldersUseCase(activeId),
             observeUserSettingsUseCase(),
-            combine(scannerState, searchAndFilterState, selectedComicForDetails, ::Triple)
-        ) { rawComics, folders, driveFolders, settings, (scan, filter, detailsComic) ->
+            combine(
+                scannerState,
+                searchAndFilterState,
+                selectedComicForDetails,
+                selectedComicKeysState,
+                editingMetadataComicsState
+            ) { scan, filter, details, selectedKeys, editingComics ->
+                UiExtraState(scan, filter, details, selectedKeys, editingComics)
+            }
+        ) { rawComics, folders, driveFolders, settings, extras ->
             val totalCount = rawComics.size
             val revoked = folders.filter { !it.hasPersistedPermission }
+            val rawComicsByKey = rawComics.associateBy { it.comicKey }
 
-            val tabFilteredComics = when (filter.selectedFilterTab) {
+            val tabFilteredComics = when (extras.filter.selectedFilterTab) {
                 LibraryFilterTab.ALL, LibraryFilterTab.SERIES -> rawComics
                 LibraryFilterTab.IN_PROGRESS -> rawComics.filter { it.progress != null && !it.progress.isFinished }
                 LibraryFilterTab.FINISHED -> rawComics.filter { it.progress?.isFinished == true }
             }
 
-            val searchFilteredComics = if (filter.query.isBlank()) {
+            val searchFilteredComics = if (extras.filter.query.isBlank()) {
                 tabFilteredComics
             } else {
                 tabFilteredComics.filter { comic ->
-                    comic.title.contains(filter.query, ignoreCase = true) ||
-                            comic.fileName.contains(filter.query, ignoreCase = true) ||
-                            comic.metadata?.title?.contains(filter.query, ignoreCase = true) == true ||
-                            comic.metadata?.series?.contains(filter.query, ignoreCase = true) == true ||
-                            comic.metadata?.writer?.contains(filter.query, ignoreCase = true) == true ||
-                            comic.metadata?.publisher?.contains(filter.query, ignoreCase = true) == true ||
-                            comic.metadata?.genre?.contains(filter.query, ignoreCase = true) == true
+                    comic.title.contains(extras.filter.query, ignoreCase = true) ||
+                            comic.fileName.contains(extras.filter.query, ignoreCase = true) ||
+                            comic.metadata?.title?.contains(extras.filter.query, ignoreCase = true) == true ||
+                            comic.metadata?.series?.contains(extras.filter.query, ignoreCase = true) == true ||
+                            comic.metadata?.writer?.contains(extras.filter.query, ignoreCase = true) == true ||
+                            comic.metadata?.publisher?.contains(extras.filter.query, ignoreCase = true) == true ||
+                            comic.metadata?.genre?.contains(extras.filter.query, ignoreCase = true) == true
                 }
             }
 
@@ -145,26 +168,32 @@ class LibraryViewModel @Inject constructor(
 
             val seriesList = groupComicsIntoSeries(sortedComics, settings.librarySortOrder)
 
+            val validSelectedKeys = extras.selectedKeys.filter { it in rawComicsByKey }.toSet()
+            val currentDetailsComic = extras.detailsComic?.let { rawComicsByKey[it.comicKey] }
+            val currentEditingComics = extras.editingComics?.mapNotNull { rawComicsByKey[it.comicKey] }
+
             LibraryUiState(
                 comics = sortedComics,
                 seriesList = seriesList,
-                selectedSeriesKey = filter.selectedSeriesKey,
+                selectedSeriesKey = extras.filter.selectedSeriesKey,
                 folders = folders,
                 driveFolders = driveFolders,
                 libraries = libraries,
                 activeLibraryId = activeId,
-                selectedFilterTab = filter.selectedFilterTab,
+                selectedFilterTab = extras.filter.selectedFilterTab,
                 layoutMode = settings.libraryLayoutMode,
                 isInitialLoading = false,
-                isScanning = scan.isScanning,
+                isScanning = extras.scan.isScanning,
                 revokedFolders = revoked,
-                activeError = scan.activeError,
-                scanFailureCount = scan.scanFailureCount,
-                searchQuery = filter.query,
-                isSearchActive = filter.isActive,
+                activeError = extras.scan.activeError,
+                scanFailureCount = extras.scan.scanFailureCount,
+                searchQuery = extras.filter.query,
+                isSearchActive = extras.filter.isActive,
                 sortOrder = settings.librarySortOrder,
                 totalComicCount = totalCount,
-                selectedComicForDetails = detailsComic
+                selectedComicForDetails = currentDetailsComic,
+                selectedComicKeys = validSelectedKeys,
+                editingMetadataComics = currentEditingComics
             )
         }
     }.stateIn(
@@ -286,6 +315,7 @@ class LibraryViewModel @Inject constructor(
 
             is LibraryUiEvent.LibrarySelected -> {
                 searchAndFilterState.update { it.copy(selectedSeriesKey = null) }
+                selectedComicKeysState.value = emptySet()
                 viewModelScope.launch {
                     updateActiveLibraryUseCase(event.libraryId)
                 }
@@ -341,14 +371,17 @@ class LibraryViewModel @Inject constructor(
                 searchAndFilterState.update {
                     it.copy(selectedFilterTab = event.tab, selectedSeriesKey = null)
                 }
+                selectedComicKeysState.value = emptySet()
             }
 
             is LibraryUiEvent.SeriesSelected -> {
                 searchAndFilterState.update { it.copy(selectedSeriesKey = event.seriesKey) }
+                selectedComicKeysState.value = emptySet()
             }
 
             is LibraryUiEvent.ClearSelectedSeries -> {
                 searchAndFilterState.update { it.copy(selectedSeriesKey = null) }
+                selectedComicKeysState.value = emptySet()
             }
 
             is LibraryUiEvent.ToggleLayoutMode -> {
@@ -368,6 +401,70 @@ class LibraryViewModel @Inject constructor(
 
             is LibraryUiEvent.DismissComicDetails -> {
                 selectedComicForDetails.value = null
+            }
+
+            is LibraryUiEvent.ToggleComicSelected -> {
+                selectedComicKeysState.update { current ->
+                    if (event.comicKey in current) current - event.comicKey else current + event.comicKey
+                }
+            }
+
+            is LibraryUiEvent.EnterSelectionMode -> {
+                selectedComicKeysState.value = setOf(event.comicKey)
+            }
+
+            is LibraryUiEvent.SelectAllComics -> {
+                val currentVisible = uiState.value.selectedSeries?.comics ?: uiState.value.comics
+                selectedComicKeysState.value = currentVisible.map { it.comicKey }.toSet()
+            }
+
+            is LibraryUiEvent.ClearSelection -> {
+                selectedComicKeysState.value = emptySet()
+            }
+
+            is LibraryUiEvent.OpenMetadataEditorForSelection -> {
+                val selectedComics = uiState.value.comics.filter { it.comicKey in uiState.value.selectedComicKeys }
+                if (selectedComics.isNotEmpty()) {
+                    editingMetadataComicsState.value = selectedComics
+                }
+            }
+
+            is LibraryUiEvent.OpenMetadataEditorForComic -> {
+                editingMetadataComicsState.value = listOf(event.comic)
+            }
+
+            is LibraryUiEvent.DismissMetadataEditor -> {
+                editingMetadataComicsState.value = null
+            }
+
+            is LibraryUiEvent.SaveSingleMetadata -> {
+                viewModelScope.launch {
+                    val result = updateComicMetadataUseCase(event.update)
+                    result.onSuccess {
+                        selectedComicKeysState.value = emptySet()
+                        editingMetadataComicsState.value = null
+                        selectedComicForDetails.value = null
+                    }.onFailure { throwable ->
+                        scannerState.update {
+                            it.copy(activeError = ComicError.UnknownIoError(throwable.message))
+                        }
+                    }
+                }
+            }
+
+            is LibraryUiEvent.SaveBulkMetadata -> {
+                viewModelScope.launch {
+                    val result = bulkUpdateComicMetadataUseCase(event.update)
+                    result.onSuccess {
+                        selectedComicKeysState.value = emptySet()
+                        editingMetadataComicsState.value = null
+                        selectedComicForDetails.value = null
+                    }.onFailure { throwable ->
+                        scannerState.update {
+                            it.copy(activeError = ComicError.UnknownIoError(throwable.message))
+                        }
+                    }
+                }
             }
         }
     }

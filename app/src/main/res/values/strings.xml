@@ -181,14 +181,37 @@
     <string name="cd_comic_info">Comic info for %1$s</string>
     <string name="comic_details_title">Comic Details</string>
     <string name="comic_details_series">Series</string>
+    <string name="comic_details_issue">Issue</string>
+    <string name="comic_details_volume">Volume</string>
+    <string name="comic_details_year">Year</string>
     <string name="comic_details_writer">Writer</string>
-    <string name="comic_details_penciller">Penciller</string>
+    <string name="comic_details_penciller">Penciler</string>
     <string name="comic_details_publisher">Publisher</string>
     <string name="comic_details_release_date">Release Date</string>
     <string name="comic_details_genre">Genre</string>
-    <string name="comic_details_summary">Summary</string>
+    <string name="comic_details_summary">Description</string>
     <string name="comic_details_file_name">File</string>
     <string name="comic_details_format_pages">%1$s • %2$d pages</string>
     <string name="comic_details_no_embedded_metadata">No embedded metadata found in this comic.</string>
     <string name="action_read_comic">Read</string>
+
+    <!-- Metadata Editing & Multi-Select -->
+    <string name="action_edit">Edit</string>
+    <string name="selection_count">%1$d selected</string>
+    <string name="cd_clear_selection">Clear selection</string>
+    <string name="cd_select_all">Select all</string>
+    <string name="cd_edit_metadata">Edit metadata</string>
+    <string name="cd_comic_selected">%1$s selected</string>
+    <string name="metadata_multiple_values">Multiple values</string>
+    <string name="metadata_edit_title">Edit issue metadata</string>
+    <string name="metadata_bulk_edit_title">Edit %1$d issues</string>
+    <string name="metadata_field_series">Series</string>
+    <string name="metadata_field_title">Title</string>
+    <string name="metadata_field_issue">Issue number</string>
+    <string name="metadata_field_year">Year</string>
+    <string name="metadata_field_writer">Writer</string>
+    <string name="metadata_field_penciller">Penciler</string>
+    <string name="metadata_field_publisher">Publisher</string>
+    <string name="metadata_field_description">Description</string>
+    <string name="metadata_error_invalid_year">Year must be between 1 and 9999</string>
 </resources>
