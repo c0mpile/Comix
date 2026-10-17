@@ -29,7 +29,8 @@ data class LibraryUiState(
     val searchQuery: String = "",
     val isSearchActive: Boolean = false,
     val sortOrder: LibrarySortOrder = LibrarySortOrder.TITLE_ASC,
-    val totalComicCount: Int = comics.size
+    val totalComicCount: Int = comics.size,
+    val selectedComicForDetails: Comic? = null
 ) {
     val activeLibrary: ComicLibrary?
         get() = libraries.find { it.libraryId == activeLibraryId } ?: libraries.firstOrNull()
@@ -64,4 +65,6 @@ sealed interface LibraryUiEvent {
     data class DeleteLibraryConfirmed(val libraryId: String) : LibraryUiEvent
     data class FilterTabSelected(val tab: LibraryFilterTab) : LibraryUiEvent
     data object ToggleLayoutMode : LibraryUiEvent
+    data class ShowComicDetails(val comic: Comic) : LibraryUiEvent
+    data object DismissComicDetails : LibraryUiEvent
 }
