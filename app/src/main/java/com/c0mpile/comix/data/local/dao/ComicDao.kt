@@ -24,11 +24,17 @@ interface ComicDao {
     @Query("SELECT * FROM comics WHERE folder_uri = :folderUri")
     suspend fun getComicsByFolder(folderUri: String): List<ComicEntity>
 
+    @Query("SELECT * FROM comics WHERE folder_uri = :folderId AND source_type IN ('GOOGLE_DRIVE', 'DRIVE')")
+    suspend fun getComicsByDriveFolder(folderId: String): List<ComicEntity>
+
     @Query("SELECT * FROM comics WHERE local_uri = :localUri LIMIT 1")
     suspend fun getComicByLocalUri(localUri: String): ComicEntity?
 
     @Query("SELECT * FROM comics WHERE local_sample_sha256 = :sampleHash LIMIT 1")
     suspend fun findByLocalSampleHash(sampleHash: String): ComicEntity?
+
+    @Query("SELECT * FROM comics WHERE drive_file_id = :driveFileId LIMIT 1")
+    suspend fun findByDriveFileId(driveFileId: String): ComicEntity?
 
     @Upsert
     suspend fun upsertComics(comics: List<ComicEntity>)
@@ -42,6 +48,15 @@ interface ComicDao {
     @Query("DELETE FROM comics WHERE comic_key IN (:comicKeys)")
     suspend fun deleteByKeys(comicKeys: List<String>)
 
+    @Query("DELETE FROM comics WHERE drive_file_id IN (:driveFileIds)")
+    suspend fun deleteByDriveFileIds(driveFileIds: List<String>)
+
     @Query("DELETE FROM comics WHERE folder_uri = :folderUri AND drive_file_id IS NULL")
     suspend fun deleteLocalComicsInFolder(folderUri: String)
+
+    @Query("DELETE FROM comics WHERE folder_uri = :folderId AND source_type IN ('GOOGLE_DRIVE', 'DRIVE')")
+    suspend fun deleteDriveComicsInFolder(folderId: String)
+
+    @Query("DELETE FROM comics WHERE source_type IN ('GOOGLE_DRIVE', 'DRIVE')")
+    suspend fun deleteAllDriveComics()
 }

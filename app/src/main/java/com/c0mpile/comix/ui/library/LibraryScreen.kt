@@ -173,6 +173,11 @@ fun LibraryScreenContent(
         is ComicError.EmptyArchive -> stringResource(R.string.empty_no_comics_title)
         is ComicError.FileNotFound -> stringResource(R.string.error_unknown)
         is ComicError.OutOfMemory -> stringResource(R.string.error_unknown)
+        is ComicError.AuthExpired -> stringResource(R.string.error_unknown)
+        is ComicError.AuthRevoked -> stringResource(R.string.error_unknown)
+        is ComicError.NetworkUnavailable -> stringResource(R.string.error_unknown)
+        is ComicError.RateLimited -> stringResource(R.string.error_unknown)
+        is ComicError.DriveApiError -> err.message ?: stringResource(R.string.error_unknown)
         null -> null
     }
 

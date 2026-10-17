@@ -16,3 +16,9 @@ data class ReaderRoute(val comicKey: String)
  */
 @Serializable
 data object SettingsRoute
+
+/**
+ * Route for the Google Drive folder picker screen.
+ */
+@Serializable
+data object DriveFolderPickerRoute

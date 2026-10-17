@@ -118,6 +118,13 @@ fun ReaderScreenContent(
                         stringResource(R.string.error_oom_title) to stringResource(R.string.error_oom_message)
                     is ComicError.UnknownIoError ->
                         stringResource(R.string.error_unknown) to (fatalError.message ?: stringResource(R.string.error_unknown))
+                    is ComicError.AuthExpired,
+                    is ComicError.AuthRevoked,
+                    is ComicError.NetworkUnavailable,
+                    is ComicError.RateLimited ->
+                        stringResource(R.string.error_unknown) to stringResource(R.string.error_unknown)
+                    is ComicError.DriveApiError ->
+                        stringResource(R.string.error_unknown) to (fatalError.message ?: stringResource(R.string.error_unknown))
                 }
 
                 ErrorStateView(

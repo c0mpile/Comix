@@ -4,9 +4,13 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.c0mpile.comix.data.local.dao.ComicDao
+import com.c0mpile.comix.data.local.dao.DriveAccountDao
+import com.c0mpile.comix.data.local.dao.DriveFolderDao
 import com.c0mpile.comix.data.local.dao.LibraryFolderDao
 import com.c0mpile.comix.data.local.dao.ReadingProgressDao
 import com.c0mpile.comix.data.local.entity.ComicEntity
+import com.c0mpile.comix.data.local.entity.DriveAccountEntity
+import com.c0mpile.comix.data.local.entity.DriveFolderEntity
 import com.c0mpile.comix.data.local.entity.LibraryFolderEntity
 import com.c0mpile.comix.data.local.entity.ReadingProgressEntity
 
@@ -17,9 +21,11 @@ import com.c0mpile.comix.data.local.entity.ReadingProgressEntity
     entities = [
         ComicEntity::class,
         ReadingProgressEntity::class,
-        LibraryFolderEntity::class
+        LibraryFolderEntity::class,
+        DriveAccountEntity::class,
+        DriveFolderEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 @TypeConverters(ComicConverters::class)
@@ -27,4 +33,6 @@ abstract class ComixDatabase : RoomDatabase() {
     abstract fun comicDao(): ComicDao
     abstract fun readingProgressDao(): ReadingProgressDao
     abstract fun libraryFolderDao(): LibraryFolderDao
+    abstract fun driveAccountDao(): DriveAccountDao
+    abstract fun driveFolderDao(): DriveFolderDao
 }
