@@ -4,9 +4,11 @@ import android.app.Activity
 import com.c0mpile.comix.data.local.dao.ComicDao
 import com.c0mpile.comix.data.local.dao.DriveAccountDao
 import com.c0mpile.comix.data.local.dao.DriveFolderDao
+import com.c0mpile.comix.data.local.dao.ReadingProgressDao
 import com.c0mpile.comix.data.local.entity.ComicEntity
 import com.c0mpile.comix.data.local.entity.DriveAccountEntity
 import com.c0mpile.comix.data.local.entity.DriveFolderEntity
+import com.c0mpile.comix.data.local.entity.ReadingProgressEntity
 import com.c0mpile.comix.data.remote.drive.DriveApiClient
 import com.c0mpile.comix.data.remote.drive.DriveApiException
 import com.c0mpile.comix.data.remote.drive.DriveAuthorizer
@@ -542,5 +544,152 @@ class DriveRepositoryImplTest {
         val result = repository.rescanDriveFoldersForLibrary("manga")
         assertTrue(result.isSuccess)
         coVerify(exactly = 1) { driveSource.scanDriveFiles("f_manga") }
+    }
+
+    @Test
+    fun syncReadingProgressReturnsZeroWhenNoDriveAccountSignedIn() = runTest(testDispatcher) {
+        coEvery { driveAccountDao.getAccount() } returns null
+
+        val result = repository.syncReadingProgress()
+
+        assertTrue(result.isSuccess)
+        assertEquals(0, result.getOrThrow())
+        coVerify(exactly = 0) { apiClient.readProgressSyncPayload() }
+    }
+
+    @Test
+    fun syncReadingProgressPerformsLastWriteWinsMergeAndUploadsWhenLocalIsNewer() = runTest(testDispatcher) {
+        coEvery { driveAccountDao.getAccount() } returns DriveAccountEntity(
+            email = "user@example.com",
+            signedInAtEpochMillis = 1000L
+        )
+
+        val fakeDao = FakeReadingProgressDao(
+            listOf(
+                ReadingProgressEntity("comic1", 5, 20, false, 1000L),
+                ReadingProgressEntity("comic2", 8, 20, false, 3000L),
+                ReadingProgressEntity("comic3", 2, 20, false, 500L)
+            )
+        )
+
+        val remoteJson = """
+            {
+              "version": 1,
+              "entries": [
+                {"comicKey": "comic1", "currentPage": 10, "pageCount": 20, "isFinished": false, "updatedAtEpochMillis": 2000},
+                {"comicKey": "comic2", "currentPage": 3, "pageCount": 20, "isFinished": false, "updatedAtEpochMillis": 1500},
+                {"comicKey": "comic4", "currentPage": 12, "pageCount": 20, "isFinished": true, "updatedAtEpochMillis": 4000}
+              ]
+            }
+        """.trimIndent()
+
+        coEvery { apiClient.readProgressSyncPayload() } returns remoteJson
+        val writtenSlot = slot<String>()
+        coEvery { apiClient.writeProgressSyncPayload(capture(writtenSlot)) } returns Unit
+
+        val repoWithProgress = DriveRepositoryImpl(
+            authorizer = authorizer,
+            apiClient = apiClient,
+            driveSource = driveSource,
+            driveAccountDao = driveAccountDao,
+            driveFolderDao = driveFolderDao,
+            comicDao = comicDao,
+            readingProgressDao = fakeDao,
+            ioDispatcher = testDispatcher
+        )
+
+        val result = repoWithProgress.syncReadingProgress()
+
+        assertTrue(result.isSuccess)
+        assertEquals(2, result.getOrThrow())
+
+        // comic1: remote had 2000L > local 1000L -> remote wins
+        assertEquals(10, fakeDao.items["comic1"]?.currentPage)
+        assertEquals(2000L, fakeDao.items["comic1"]?.updatedAtEpochMillis)
+
+        // comic4: missing locally -> remote wins
+        assertEquals(12, fakeDao.items["comic4"]?.currentPage)
+        assertEquals(true, fakeDao.items["comic4"]?.isFinished)
+
+        // comic2: local 3000L > remote 1500L -> local wins
+        assertEquals(8, fakeDao.items["comic2"]?.currentPage)
+
+        // Verify remote was updated with merged entries
+        coVerify(exactly = 1) { apiClient.writeProgressSyncPayload(any()) }
+        val captured = writtenSlot.captured
+        assertTrue(captured.contains("comic1"))
+        assertTrue(captured.contains("comic2"))
+        assertTrue(captured.contains("comic3"))
+        assertTrue(captured.contains("comic4"))
+        assertTrue(captured.contains("\"currentPage\":8"))
+    }
+
+    @Test
+    fun syncReadingProgressDoesNotUploadWhenRemoteAlreadyHasAllLatestEntries() = runTest(testDispatcher) {
+        coEvery { driveAccountDao.getAccount() } returns DriveAccountEntity(
+            email = "user@example.com",
+            signedInAtEpochMillis = 1000L
+        )
+
+        val fakeDao = FakeReadingProgressDao(
+            listOf(
+                ReadingProgressEntity("comic1", 5, 20, false, 1000L)
+            )
+        )
+
+        val remoteJson = """
+            {
+              "version": 1,
+              "entries": [
+                {"comicKey": "comic1", "currentPage": 10, "pageCount": 20, "isFinished": false, "updatedAtEpochMillis": 2000}
+              ]
+            }
+        """.trimIndent()
+
+        coEvery { apiClient.readProgressSyncPayload() } returns remoteJson
+        coEvery { apiClient.writeProgressSyncPayload(any()) } returns Unit
+
+        val repoWithProgress = DriveRepositoryImpl(
+            authorizer = authorizer,
+            apiClient = apiClient,
+            driveSource = driveSource,
+            driveAccountDao = driveAccountDao,
+            driveFolderDao = driveFolderDao,
+            comicDao = comicDao,
+            readingProgressDao = fakeDao,
+            ioDispatcher = testDispatcher
+        )
+
+        val result = repoWithProgress.syncReadingProgress()
+
+        assertTrue(result.isSuccess)
+        assertEquals(1, result.getOrThrow())
+        assertEquals(10, fakeDao.items["comic1"]?.currentPage)
+        coVerify(exactly = 0) { apiClient.writeProgressSyncPayload(any()) }
+    }
+}
+
+private class FakeReadingProgressDao(
+    initial: List<ReadingProgressEntity> = emptyList()
+) : ReadingProgressDao {
+    val items = mutableMapOf<String, ReadingProgressEntity>().apply {
+        initial.forEach { put(it.comicKey, it) }
+    }
+    val upsertedBatches = mutableListOf<List<ReadingProgressEntity>>()
+
+    override fun observeProgress(comicKey: String): kotlinx.coroutines.flow.Flow<ReadingProgressEntity?> =
+        kotlinx.coroutines.flow.flowOf(items[comicKey])
+
+    override suspend fun getProgress(comicKey: String): ReadingProgressEntity? = items[comicKey]
+
+    override suspend fun getAllProgress(): List<ReadingProgressEntity> = items.values.toList()
+
+    override suspend fun upsertProgress(progress: ReadingProgressEntity) {
+        items[progress.comicKey] = progress
+    }
+
+    override suspend fun upsertAllProgress(progressList: List<ReadingProgressEntity>) {
+        upsertedBatches.add(progressList)
+        progressList.forEach { items[it.comicKey] = it }
     }
 }

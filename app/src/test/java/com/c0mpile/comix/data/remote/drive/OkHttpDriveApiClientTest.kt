@@ -10,6 +10,7 @@ import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -339,5 +340,134 @@ class OkHttpDriveApiClientTest {
         assertTrue(exception?.comicError is ComicError.AuthExpired)
         coVerify(exactly = 1) { authorizer.getAccessToken(forceRefresh = true) }
         coVerify(exactly = 1) { authorizer.onAuthExpired("Access token expired or revoked") }
+    }
+
+    @Test
+    fun downloadRangeSendsExpectedHeadersAndQueryParamsAndReturnsBytes() = runTest(testDispatcher) {
+        val payload = "Downloaded Range Bytes 0123456789".toByteArray()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(206)
+                .setBody(okio.Buffer().write(payload))
+        )
+
+        val result = apiClient.downloadRange("file-range-1", 0L, 255L)
+
+        val recordedRequest = server.takeRequest()
+        assertEquals("GET", recordedRequest.method)
+        assertEquals("Bearer fake-token-1", recordedRequest.getHeader("Authorization"))
+        assertEquals("bytes=0-255", recordedRequest.getHeader("Range"))
+
+        val url = recordedRequest.requestUrl!!
+        assertEquals("/files/file-range-1", url.encodedPath)
+        assertEquals("media", url.queryParameter("alt"))
+        assertEquals("true", url.queryParameter("supportsAllDrives"))
+
+        assertArrayEquals(payload, result)
+    }
+
+    @Test
+    fun readProgressSyncPayloadReturnsJsonStringWhenFileFound() = runTest(testDispatcher) {
+        val listResponse = """
+            {
+              "files": [
+                {
+                  "id": "progress-file-id",
+                  "name": "comix_reading_progress.json",
+                  "mimeType": "application/json"
+                }
+              ]
+            }
+        """.trimIndent()
+        val payloadJson = """{"version":1,"entries":[{"comicKey":"c1","currentPage":3,"pageCount":20,"isFinished":false,"updatedAtEpochMillis":1000}]}"""
+
+        server.enqueue(MockResponse().setResponseCode(200).setBody(listResponse))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(payloadJson))
+
+        val result = apiClient.readProgressSyncPayload()
+
+        val req1 = server.takeRequest()
+        val url1 = req1.requestUrl!!
+        assertEquals("appDataFolder", url1.queryParameter("spaces"))
+        assertEquals("name = 'comix_reading_progress.json' and trashed = false", url1.queryParameter("q"))
+
+        val req2 = server.takeRequest()
+        val url2 = req2.requestUrl!!
+        assertEquals("/files/progress-file-id", url2.encodedPath)
+        assertEquals("media", url2.queryParameter("alt"))
+
+        assertEquals(payloadJson, result)
+    }
+
+    @Test
+    fun readProgressSyncPayloadReturnsNullWhenFileMissing() = runTest(testDispatcher) {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"files":[]}"""))
+
+        val result = apiClient.readProgressSyncPayload()
+
+        val req = server.takeRequest()
+        val url = req.requestUrl!!
+        assertEquals("appDataFolder", url.queryParameter("spaces"))
+        assertNull(result)
+    }
+
+    @Test
+    fun writeProgressSyncPayloadUpdatesExistingFileWhenAlreadyPresent() = runTest(testDispatcher) {
+        val listResponse = """
+            {
+              "files": [
+                {
+                  "id": "existing-sync-id",
+                  "name": "comix_reading_progress.json",
+                  "mimeType": "application/json"
+                }
+              ]
+            }
+        """.trimIndent()
+        val payloadJson = """{"version":1,"entries":[]}"""
+
+        server.enqueue(MockResponse().setResponseCode(200).setBody(listResponse))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
+
+        apiClient.writeProgressSyncPayload(payloadJson)
+
+        val req1 = server.takeRequest()
+        val url1 = req1.requestUrl!!
+        assertEquals("appDataFolder", url1.queryParameter("spaces"))
+
+        val req2 = server.takeRequest()
+        assertEquals("PATCH", req2.method)
+        assertTrue(req2.path!!.contains("/files/existing-sync-id"))
+        assertEquals("media", req2.requestUrl!!.queryParameter("uploadType"))
+        assertEquals(payloadJson, req2.body.readUtf8())
+    }
+
+    @Test
+    fun writeProgressSyncPayloadCreatesNewFileInAppDataFolderWhenMissing() = runTest(testDispatcher) {
+        val emptyListResponse = """{"files":[]}"""
+        val createResponse = """{"id":"newly-created-sync-id"}"""
+        val payloadJson = """{"version":1,"entries":[]}"""
+
+        server.enqueue(MockResponse().setResponseCode(200).setBody(emptyListResponse))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(createResponse))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
+
+        apiClient.writeProgressSyncPayload(payloadJson)
+
+        val req1 = server.takeRequest()
+        assertEquals("appDataFolder", req1.requestUrl!!.queryParameter("spaces"))
+
+        val req2 = server.takeRequest()
+        assertEquals("POST", req2.method)
+        assertEquals("/files", req2.requestUrl!!.encodedPath)
+        val createBody = req2.body.readUtf8()
+        assertTrue(createBody.contains("comix_reading_progress.json"))
+        assertTrue(createBody.contains("appDataFolder"))
+
+        val req3 = server.takeRequest()
+        assertEquals("PATCH", req3.method)
+        assertTrue(req3.path!!.contains("/files/newly-created-sync-id"))
+        assertEquals("media", req3.requestUrl!!.queryParameter("uploadType"))
+        assertEquals(payloadJson, req3.body.readUtf8())
     }
 }
